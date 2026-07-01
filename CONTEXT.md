@@ -1,191 +1,166 @@
-# AI-KTV 项目上下文
+# AI-KTV
 
-## 系统概述
+AI-KTV 是一个面向单个本地 KTV 房间的点歌、播放和演唱上下文。它描述房间内的设备角色、歌曲资产、播放队列、演唱模式和演唱者输入之间的关系。
 
-一个本地部署的KTV系统，支持点歌和唱歌功能。
+## Language
 
-## 核心概念
+### Room and Devices
 
-### 设备角色
+**KTV Room**:
+一次独立的本地 KTV 使用场景，由一个 **Server** 管理，并包含零个或一个 **Master** 以及最多两个已配对的 **Slave**。
+_Avoid_: session, deployment, environment
 
-- **Server（服务器）**：核心业务逻辑层。负责歌曲库管理、点歌队列、音频混合（伴奏+人声）、WebRTC信令中转、主从设备注册/配对。
-- **Master（主机）**：纯展示层。负责播放MV、渲染歌词、显示UI，从Server拉取数据，音频从Master的声卡/扬声器输出。
-- **Slave（从机）**：纯输入层。负责麦克风采集、点歌操作界面。
+**Server**:
+KTV Room 的协调者，拥有歌曲库、播放队列、设备配对状态和当前播放状态。
+_Avoid_: backend, host machine, computer
 
-### 架构模式
+**Master**:
+KTV Room 的主显示和放声角色，面向观众展示 MV、歌词、播放状态和队列。
+_Avoid_: TV, player, display client
 
-三层架构：Server为大脑，Master为眼睛，Slave为手+嘴。
+**Slave**:
+KTV Room 的点歌和演唱输入角色，由演唱者使用；一个 KTV Room 最多同时有两个已配对的 Slave。
+_Avoid_: phone, remote, microphone client
 
-- Server和Master可以部署在同一台机器上，也可以分开部署。
-- 所有设备（Master、Slave）都连接到Server。
-- 一个Server（即一个KTV房间）最多支持2个Slave配对。
+**Device**:
+连接到 **Server** 的房间角色实例；在本上下文中通常指 **Master** 或 **Slave**，不指运行 Server 的物理机器。
+_Avoid_: client, endpoint
 
-### 音频链路
+**Pairing Code**:
+允许 **Slave** 加入当前 **KTV Room** 的一次性口令。
+_Avoid_: password, token, auth code
 
-```
-Slave 1 麦克风采集 ──┐
-                     ├──→ WebRTC传输 → Server接收 → Server混音(人声1+人声2+伴奏) → 推送给Master → Master声卡播放
-Slave 2 麦克风采集 ──┘
-```
+**Pairing**:
+**Slave** 使用 **Pairing Code** 成为当前 **KTV Room** 中已连接输入角色的过程。
+_Avoid_: login, registration, binding
 
-- 支持合唱模式：两个Slave同时唱同一首歌，两路人声混合后与伴奏合并输出。
-- 同一时间只播放一首歌，两个Slave共享同一首歌的伴奏。
+### Songs and Lyrics
 
-### 歌曲模式
+**Song**:
+可被点播和演唱的曲目，属于 **Song Library**，并可关联 MV、歌词、原唱音频和伴奏音频。
+_Avoid_: media item, file, track
 
-- **原唱模式**：播放MV原版音频（含原唱），人声叠加上去，跟唱体验。
-- **伴奏模式**：使用预分离的伴奏音轨，和人声混合输出，真KTV体验。
-- 支持两种模式切换。
-- 伴奏音轨由用户使用外部软件预处理分离后上传至Server，系统本身不做分离。
+**Song Library**:
+当前 **KTV Room** 可点播的 **Song** 集合。
+_Avoid_: database, folder, catalog
 
-### 歌曲数据组织
+**MV**:
+与 **Song** 关联的音乐视频，由 **Master** 在演唱时展示。
+_Avoid_: video file, clip
 
-```
-songs/
-└── 歌手-歌名/
-    ├── video.mp4          # MV视频
-    ├── vocal.wav           # 人声音轨（可选）
-    ├── accompaniment.wav   # 伴奏音轨（可选）
-    ├── lyrics.lrc          # 歌词文件
-    └── meta.json           # 元数据（歌名、歌手、时长等）
-```
+**Lyrics**:
+与 **Song** 关联的逐行歌词文本，可与当前播放进度同步展示。
+_Avoid_: LRC, subtitle
 
-### 歌曲来源
+**Original Vocal**:
+**Song** 的含原唱音频版本，用于跟唱。
+_Avoid_: vocal track, full mix
 
-- 本地文件为主：用户手动放入Server的songs目录，Server扫描自动识别。
-- 在线搜索补充：支持在线搜索下载（后续迭代）。
+**Accompaniment**:
+**Song** 的无原唱伴奏版本，用于正式演唱。
+_Avoid_: backing track, instrumental file
 
-### 歌词来源
+### Queue and Playback
 
-- LRC歌词文件为主。
-- 在线歌词API补充（后续迭代）。
+**Playback Queue**:
+等待播放的 **Song** 有序列表；所有已连接的 **Master** 和 **Slave** 看到并管理同一个队列。
+_Avoid_: playlist, order list
 
-## 设备连接与配对
+**Queued Song**:
+已经加入 **Playback Queue** 但尚未成为 **Current Song** 的 **Song**。
+_Avoid_: request, order
 
-- **发现方式**：Slave手动输入Server的IP地址和端口连接。
-- **配对方式**：每次配对码。Master启动时生成配对码，Slave输入配对码后连接。
-- 后续迭代支持扫码连接（二维码含IP+配对码）。
+**Current Song**:
+当前正在 **KTV Room** 中播放和演唱的唯一 **Song**。
+_Avoid_: active track, now playing item
 
-## 点歌交互
+**Pin to Next**:
+将一个 **Queued Song** 提升为下一个播放目标的队列操作。
+_Avoid_: top, priority play, jump queue
 
-- **搜索**：输入歌名/歌手名搜索，结果列表点选。
-- **分类浏览**：按歌手、语种、排行榜分类（后续迭代）。
-- **播放队列**：点歌后加入队列末尾，依次播放。
-- **置顶功能**：支持置顶，跳过队列直接播放。
+**Skip**:
+结束 **Current Song** 并切换到下一个可播放 **Queued Song** 的播放操作。
+_Avoid_: cut song, next
 
-## 典型使用场景
+### Singing and Audio
 
-- **Server**：电脑（Node.js进程，FFmpeg混音，托管Web页面）
-- **Master**：智能电视（浏览器访问Server的URL，显示MV+歌词，播放混合音频）
-- **Slave**：手机（浏览器访问Server的URL，点歌+麦克风+歌词显示）
+**Singing Mode**:
+**Current Song** 的演唱音频来源选择；当前只包含 **Original Vocal Mode** 和 **Accompaniment Mode**。
+_Avoid_: mode, audio mode
 
-只有Server需要安装，Master和Slave通过浏览器访问即可。
+**Original Vocal Mode**:
+使用 **Original Vocal** 作为 **Current Song** 的基础音频，演唱者的人声叠加其上。
+_Avoid_: original mode, guide vocal
 
-## 技术栈
+**Accompaniment Mode**:
+使用 **Accompaniment** 作为 **Current Song** 的基础音频，演唱者的人声叠加其上。
+_Avoid_: karaoke mode, instrumental mode
 
-- **前端/UI**：React（浏览器端，非Electron）
-- **实时音频**：WebRTC
-- **网络通信**：WebSocket（信令）
-- **后端**：Node.js / TypeScript
-- **HTTPS**：Server自签证书，启用HTTPS，确保手机浏览器可访问麦克风
+**Chorus Mode**:
+两个已配对 **Slave** 同时为同一个 **Current Song** 提供演唱输入的状态。
+_Avoid_: duet, two-mic mode
 
-## 项目结构
+**Vocal Input**:
+来自一个 **Slave** 的演唱者人声。
+_Avoid_: microphone stream, voice data
 
-Monorepo，共享类型定义和工具函数：
-- `packages/server` — 服务器（Node.js + Express/Fastify，托管Web页面，FFmpeg混音）
-- `packages/web-master` — Master端Web页面（React，MV播放+歌词+队列）
-- `packages/web-slave` — Slave端Web页面（React，点歌+麦克风+歌词）
-- `packages/shared` — 共享代码（类型定义、WebSocket消息格式、WebRTC信令格式）
+**Mixed Audio**:
+**Current Song** 的基础音频与一个或两个 **Vocal Input** 合成后的房间输出音频。
+_Avoid_: output stream, final audio
 
-## 部署与启动
+**Accompaniment Volume**:
+影响整个 **KTV Room** 中 **Current Song** 基础音频响度的音量设置。
+_Avoid_: music volume, master volume
 
-Server为独立Node进程，同时托管Master和Slave的Web页面。
+**Vocal Volume**:
+影响单个 **Slave** 的 **Vocal Input** 响度的音量设置。
+_Avoid_: mic gain, microphone volume
 
-启动顺序：
-1. 启动Server（电脑上运行，自动扫描歌曲库，开启HTTPS服务）
-2. 电视浏览器访问 `https://<Server IP>:<端口>/master` → 显示配对码
-3. 手机浏览器访问 `https://<Server IP>:<端口>/slave` → 输入配对码连接
+### Connection States
 
-第一次访问时浏览器会提示证书不受信任，点击"继续访问"即可。
+**Disconnected Slave**:
+曾经配对但当前失去连接的 **Slave**；它的 **Vocal Input** 不再参与 **Mixed Audio**。
+_Avoid_: offline phone, muted mic
 
-## 数据存储
+**Reconnection Grace Period**:
+**Disconnected Slave** 可回到原 **KTV Room** 且不重新输入 **Pairing Code** 的短暂时间窗口。
+_Avoid_: timeout, reconnect cache
 
-- 歌曲库：文件系统+JSON，歌曲目录结构即数据库，Server启动时扫描加载到内存。
-- 播放队列：内存中维护，Server重启后队列清空，不持久化。
+## Flagged Ambiguities
 
-## WebRTC配置
+**Server vs host machine**:
+“Server” 指 KTV Room 的协调角色，不指某台物理电脑。需要讨论硬件时，使用“运行 Server 的机器”。
 
-局域网环境，不使用STUN/TURN服务器。ICE候选只收集host类型（本地IP），设备直接互连。
+**Master vs Server**:
+“Master” 是主显示和放声角色，不是控制全局状态的角色；全局状态属于 **Server**。
 
-## 音频混合
+**Song vs song file**:
+“Song” 是可点播曲目，不是某个具体文件。MV、Lyrics、Original Vocal 和 Accompaniment 是 Song 的关联资产。
 
-Server端使用FFmpeg管道进行音频混合：接收多路Slave人声输入+伴奏音轨，混合后输出PCM流推送给Master。Node.js负责管道管理和信令，音频计算交给FFmpeg。
+**Original Vocal vs Vocal Input**:
+“Original Vocal” 是歌曲自带的原唱音频；“Vocal Input” 是演唱者通过 Slave 提供的人声。
 
-## 通信协议分工
+**Pin to Next vs Skip**:
+“Pin to Next” 改变队列顺序；“Skip” 结束当前播放。二者不应混用。
 
-| 数据类型 | 协议 | 用途 |
-|----------|------|------|
-| 信令 | WebSocket | 配对、点歌、队列管理、状态同步 |
-| 音频流 | WebRTC | Slave麦克风→Server、Server→Master混合音频 |
-| MV视频 | HTTP流媒体 | Master播放MV视频文件 |
-| 查询接口 | HTTP REST API | 歌曲列表、元数据查询 |
+## Example Dialogue
 
-## Slave界面
+Dev: 这个 KTV Room 里现在有几个 Slave？
 
-底部Tab切换两个页面：
-- **点歌Tab**：搜索歌曲、浏览队列
-- **正在唱Tab**：同步显示当前歌曲歌词（与Master同步滚动）
+Domain Expert: 一个 Master 和两个已配对的 Slave。两个 Slave 都可以点歌，但同一时间只有一个 Current Song。
 
-## Master界面
+Dev: 如果两个 Slave 都开始唱，是两个 Song 各唱各的吗？
 
-单屏布局，MV视频为主，歌词半透明叠加在视频底部（KTV经典效果）。
-- MV播放：HTML5 `<video>` 标签，Electron内核原生支持MP4。
-- 歌词渲染：React组件，解析LRC时间戳，监听video `timeupdate`事件同步高亮。
-- 点歌队列（侧边栏/弹窗）
-- 配对码（弹窗/设置页）
-- 设备状态（连接的Slave列表、麦克风状态）
-- 伴奏音量控制
+Domain Expert: 不是。那是 Chorus Mode，两个 Slave 都为同一个 Current Song 提供 Vocal Input。
 
-## 队列管理
+Dev: 演唱时用原唱还是伴奏，属于 Slave 的设置吗？
 
-所有Slave和Master都能管理整个队列（点歌、置顶、删除），不做权限区分。
+Domain Expert: 不属于。Singing Mode 属于 Current Song 的房间播放状态，切换后所有人听到的基础音频一致。
 
-## 播放控制
+Dev: 用户点“置顶”时是立刻切歌吗？
 
-- 暂停/继续
-- 切歌（跳过当前歌曲）
-- 原唱/伴奏模式切换
-- 后续迭代：重唱、进度拖动
+Domain Expert: 不是。那是 Pin to Next，只把 Queued Song 提升为下一个播放目标。要结束 Current Song 才是 Skip。
 
-## 音量控制
+Dev: 一个 Slave 断开后，队列会丢吗？
 
-- **伴奏音量**：Master端控制，全局生效。
-- **人声音量**：每个Slave各自控制自己的麦克风音量。
-
-## 容错策略
-
-- **Slave断连**：Server静默该Slave的人声通道，继续播放伴奏，Master提示断开。30秒内重连免配对，超过30秒需重新输入配对码。
-- **Master断连**：Server保留队列状态，Master重连后恢复当前播放状态。
-- **Server断连**：所有设备提示"服务器已断开"，等待重连。
-
-## MVP范围
-
-### 必须有
-- Server：歌曲目录扫描、点歌队列、WebRTC信令、音频混合（FFmpeg）
-- Master：MV播放、歌词同步显示、配对码显示、队列显示、伴奏音量控制
-- Slave：搜索点歌、麦克风采集、人声音量控制、歌词同步显示
-- 设备连接：手动IP+配对码
-- 合唱模式（两路人声混合）
-- 原唱/伴奏切换
-
-### 后续迭代
-- 扫码连接
-- 分类浏览
-- 在线歌词API
-- 重唱、进度拖动
-- Web管理后台上传歌曲
-
-## 非功能需求
-
-- 从Slave收声到Master放声必须有极低延迟（目标<100ms）。
-- 局域网部署，设备在同一局域网下。
+Domain Expert: 不会。Playback Queue 属于 Server 管理的 KTV Room。断开的只是这个 Slave 的 Vocal Input。
