@@ -3,14 +3,20 @@ import type { KtvRoomState } from "../../shared/protocol";
 import { formatTime, modeLabel } from "./format";
 import { LyricStage } from "./lyrics";
 import { type MasterPlayback, useMasterPlayback } from "./masterPlayback";
+import { useMasterVocalInput } from "./masterVocalInput";
 import { useRoomSocket } from "./roomSocket";
 import { Panel, PlaybackNotice, PlaybackProgress, PlaybackStatusPanel, QueueList, Shell, SlotList } from "./ui";
 
 export function MasterPage() {
-  const { state, status, error, send } = useRoomSocket();
+  const { state, status, error, lastEvent, send } = useRoomSocket();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const playback = useMasterPlayback(state, send, audioRef);
+  const vocalInput = useMasterVocalInput({ state, lastEvent, send });
   const isSingingView = Boolean(state?.currentSong);
+  const unlockRoomAudio = () => {
+    playback.unlockAudio();
+    vocalInput.resumeOutput();
+  };
 
   useEffect(() => {
     if (status === "open") send({ type: "registerMaster" });
@@ -59,7 +65,7 @@ export function MasterPage() {
             <div className="now-playing standby">
               <p className="eyebrow">正在播放</p>
               <h2>等待点歌</h2>
-              <MasterAudioGate playback={playback} />
+              <MasterAudioGate playback={playback} onUnlock={unlockRoomAudio} />
             </div>
           )}
           <LyricStage
@@ -76,7 +82,7 @@ export function MasterPage() {
         <section className="compact-room-strip">
           <span>{playback.message}</span>
           <span>{formatTime(playback.currentTime)} / {formatTime(playback.duration)}</span>
-          {playback.status === "blocked" && <button onClick={playback.unlockAudio}>启用声音</button>}
+          {playback.status === "blocked" && <button onClick={unlockRoomAudio}>启用声音</button>}
         </section>
       ) : (
         <section className="dashboard-grid">
@@ -84,7 +90,7 @@ export function MasterPage() {
             <SlotList state={state} />
           </Panel>
           <Panel title="播放状态">
-            <PlaybackStatusPanel playback={playback} onResume={playback.unlockAudio} />
+            <PlaybackStatusPanel playback={playback} onResume={unlockRoomAudio} />
           </Panel>
           <Panel title="待唱队列" wide>
             <QueueList state={state} />
@@ -104,13 +110,13 @@ function compactSlotSummary(state: KtvRoomState): string {
   return `${connectedSlots.length} 人已连接`;
 }
 
-function MasterAudioGate({ playback }: { playback: MasterPlayback }) {
+function MasterAudioGate({ playback, onUnlock }: { playback: MasterPlayback; onUnlock: () => void }) {
   if (playback.audioReady) {
     return <div className="audio-ready-badge">主屏已就绪</div>;
   }
 
   return (
-    <button className="audio-unlock-button" onClick={playback.unlockAudio}>
+    <button className="audio-unlock-button" onClick={onUnlock}>
       启用主屏声音
     </button>
   );

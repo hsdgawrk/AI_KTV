@@ -50,6 +50,15 @@ a:hover {
   border-color: var(--gold);
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+button:disabled:hover {
+  border-color: var(--line);
+}
+
 button.active,
 .segmented button.active {
   background: var(--gold);
@@ -416,6 +425,44 @@ h3 {
 
 .playback-status-panel span {
   color: var(--text-muted);
+}
+
+.vocal-input-status {
+  display: grid;
+  gap: 4px;
+  min-height: 76px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #11110f;
+  padding: 12px;
+}
+
+.vocal-input-status span,
+.vocal-input-status small {
+  color: var(--text-muted);
+}
+
+.vocal-input-status strong {
+  color: #f4efe3;
+  font-size: 22px;
+}
+
+.vocal-input-status.available {
+  border-color: rgba(114, 181, 106, 0.55);
+  background: rgba(114, 181, 106, 0.1);
+}
+
+.vocal-input-status.available strong {
+  color: #bdeeb7;
+}
+
+.vocal-input-status.interrupted {
+  border-color: rgba(214, 169, 67, 0.62);
+  background: rgba(214, 169, 67, 0.1);
+}
+
+.vocal-input-status.interrupted strong {
+  color: #f0c86e;
 }
 
 .compact-room-strip {

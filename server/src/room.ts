@@ -5,6 +5,7 @@ import type {
   SingingMode,
   SlaveSlot,
   Song,
+  VocalInputAvailability,
   VocalInputState
 } from "../../shared/protocol";
 import { seededSongLibrary } from "./songs";
@@ -76,6 +77,12 @@ export class KtvRoom {
 
   disconnectMaster(): void {
     this.masterConnected = false;
+    for (const slot of this.slaveSlots) {
+      if (slot.connectionState === "connected" && slot.vocalInputAvailability === "available") {
+        slot.vocalInputAvailability = "interrupted";
+        slot.vocalInputState = "idle";
+      }
+    }
   }
 
   pairSlave(input: {
@@ -90,6 +97,7 @@ export class KtvRoom {
       const slot = this.slot(existing.slotNumber);
       existing.active = true;
       slot.connectionState = "connected";
+      slot.vocalInputAvailability = "unavailable";
       slot.disconnectedUntil = undefined;
       slot.vocalInputState = "idle";
 
@@ -124,6 +132,7 @@ export class KtvRoom {
       displayName,
       displayLabel: this.displayLabel(slotNumber, displayName),
       connectionState: "connected" satisfies ConnectionState,
+      vocalInputAvailability: "unavailable" satisfies VocalInputAvailability,
       vocalVolume: DEFAULT_VOLUME,
       vocalInputState: "idle" satisfies VocalInputState,
       disconnectedUntil: undefined
@@ -139,6 +148,7 @@ export class KtvRoom {
     const slot = this.slot(record.slotNumber);
     record.active = false;
     slot.connectionState = "disconnected";
+    slot.vocalInputAvailability = "unavailable";
     slot.vocalInputState = "idle";
     slot.disconnectedUntil = this.clock() + RECONNECTION_GRACE_PERIOD_MS;
   }
@@ -250,10 +260,28 @@ export class KtvRoom {
     return { ok: true, value: undefined };
   }
 
+  setVocalInputAvailability(pairedSlaveId: string, availability: VocalInputAvailability): CommandResult {
+    const record = this.requireConnectedSlave(pairedSlaveId);
+    if (!record.ok) return record;
+
+    const slot = this.slot(record.value.slotNumber);
+    slot.vocalInputAvailability = availability;
+    if (availability !== "available") {
+      slot.vocalInputState = "idle";
+    }
+
+    return { ok: true, value: undefined };
+  }
+
   setVocalInputState(pairedSlaveId: string, vocalInputState: VocalInputState): CommandResult {
     const record = this.requireConnectedSlave(pairedSlaveId);
     if (!record.ok) return record;
-    this.slot(record.value.slotNumber).vocalInputState = vocalInputState;
+    const slot = this.slot(record.value.slotNumber);
+    if (vocalInputState === "singing" && slot.vocalInputAvailability !== "available") {
+      return { ok: false, reason: "Vocal Input 不可用" };
+    }
+
+    slot.vocalInputState = vocalInputState;
     return { ok: true, value: undefined };
   }
 
@@ -306,6 +334,7 @@ export class KtvRoom {
       slotNumber,
       displayLabel: `${slotNumber}号位`,
       connectionState: "empty",
+      vocalInputAvailability: "unavailable",
       vocalVolume: DEFAULT_VOLUME,
       vocalInputState: "idle"
     };

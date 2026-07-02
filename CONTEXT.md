@@ -152,12 +152,28 @@ _Avoid_: duet, two-mic mode
 来自一个 **Slave** 的演唱者人声。
 _Avoid_: microphone stream, voice data
 
+**Vocal Input Availability**:
+一个已配对 **Slave** 当前是否具备向 **KTV Room** 提供 **Vocal Input** 的条件；取值为 **Unavailable Vocal Input**、**Available Vocal Input** 或 **Interrupted Vocal Input**，且不表示演唱者已经开始演唱。
+_Avoid_: microphone permission, audio connection, mic ready
+
+**Unavailable Vocal Input**:
+**Slave** 当前没有可供 **KTV Room** 使用的 **Vocal Input**。
+_Avoid_: permission denied, no mic, disconnected audio
+
+**Available Vocal Input**:
+**Slave** 当前具备可供 **KTV Room** 使用的 **Vocal Input**。
+_Avoid_: mic connected, stream ready
+
+**Interrupted Vocal Input**:
+**Slave** 之前具备 **Vocal Input**，但当前临时无法被 **KTV Room** 使用，且仍可能恢复。
+_Avoid_: reconnecting, broken mic, network issue
+
 **Vocal Input State**:
-一个 **Slave Slot** 当前是否正在提供 **Vocal Input** 的房间内状态。
+一个 **Slave Slot** 的 **Vocal Input** 当前是否应该参与 **Mixed Audio** 的房间内状态；它不表示 **Vocal Input Availability**。
 _Avoid_: recording state, mic status, speaking
 
 **Mixed Audio**:
-**Current Song** 的基础音频与一个或两个 **Vocal Input** 合成后的房间输出音频。
+**Current Song** 的基础音频与一个或两个 **Vocal Input** 合成后的房间输出音频；它不是可保存或回传给 **Server** 的歌曲资产。
 _Avoid_: output stream, final audio
 
 **Progressive Lyric Highlight**:
@@ -198,6 +214,12 @@ _Avoid_: timeout, reconnect cache
 
 **Original Vocal vs Vocal Input**:
 “Original Vocal” 是歌曲自带的原唱音频；“Vocal Input” 是演唱者通过 Slave 提供的人声。
+
+**Vocal Input Availability vs Vocal Input State**:
+**Vocal Input Availability** 描述 Slave 是否具备提供人声的条件；**Vocal Input State** 描述这个人声是否参与当前房间输出。
+
+**Vocal Input Availability vs device error reason**:
+**Vocal Input Availability** 是房间协作状态，不是浏览器权限、设备缺失或 WebRTC 连接失败等本地错误原因的分类。
 
 **MV vs room audio**:
 **MV** 只表示 **Master** 展示的画面资产；房间可听见的歌曲基础音频来自 **Original Vocal** 或 **Accompaniment**。

@@ -195,13 +195,50 @@ describe("KtvRoom", () => {
     room.changeSingingMode(pairedSlaveId, "accompaniment");
     room.setAccompanimentVolume(pairedSlaveId, 42);
     room.setVocalVolume(pairedSlaveId, 88);
+    room.setVocalInputAvailability(pairedSlaveId, "available");
     room.setVocalInputState(pairedSlaveId, "singing");
 
     const state = room.getState();
     expect(state.singingMode).toBe("accompaniment");
     expect(state.accompanimentVolume).toBe(42);
     expect(state.slaveSlots[0].vocalVolume).toBe(88);
+    expect(state.slaveSlots[0].vocalInputAvailability).toBe("available");
     expect(state.slaveSlots[0].vocalInputState).toBe("singing");
+  });
+
+  it("rejects singing while vocal input is unavailable", () => {
+    const room = new KtvRoom({ pairingCode: "1234" });
+    const pairedSlaveId = pairedSlave(room, "device-a");
+
+    expect(room.setVocalInputState(pairedSlaveId, "singing").ok).toBe(false);
+    expect(room.getState().slaveSlots[0].vocalInputState).toBe("idle");
+  });
+
+  it("forces vocal input state idle when availability is interrupted", () => {
+    const room = new KtvRoom({ pairingCode: "1234" });
+    const pairedSlaveId = pairedSlave(room, "device-a");
+
+    room.setVocalInputAvailability(pairedSlaveId, "available");
+    room.setVocalInputState(pairedSlaveId, "singing");
+    room.setVocalInputAvailability(pairedSlaveId, "interrupted");
+
+    const slot = room.getState().slaveSlots[0];
+    expect(slot.vocalInputAvailability).toBe("interrupted");
+    expect(slot.vocalInputState).toBe("idle");
+  });
+
+  it("interrupts available vocal inputs when the master disconnects", () => {
+    const room = new KtvRoom({ pairingCode: "1234" });
+    const pairedSlaveId = pairedSlave(room, "device-a");
+
+    room.connectMaster();
+    room.setVocalInputAvailability(pairedSlaveId, "available");
+    room.setVocalInputState(pairedSlaveId, "singing");
+    room.disconnectMaster();
+
+    const slot = room.getState().slaveSlots[0];
+    expect(slot.vocalInputAvailability).toBe("interrupted");
+    expect(slot.vocalInputState).toBe("idle");
   });
 
   it("starts in accompaniment mode and keeps singing mode across song changes", () => {

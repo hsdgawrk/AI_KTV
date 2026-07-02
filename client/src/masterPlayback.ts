@@ -37,6 +37,12 @@ export function useMasterPlayback(
     currentSongRef.current = state?.currentSong;
   }, [state?.currentSong]);
 
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.volume = Math.max(0, Math.min(1, (state?.accompanimentVolume ?? 70) / 100));
+  }, [audioRef, state?.accompanimentVolume]);
+
   const markAudioReady = (ready: boolean) => {
     audioReadyRef.current = ready;
     setAudioReady(ready);

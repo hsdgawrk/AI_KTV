@@ -54,6 +54,59 @@ describe("handleClientCommand", () => {
       { type: "commandRejected", command: "addSongToQueue", reason: "Slave 未配对或已断开" }
     ]);
   });
+
+  it("routes slave vocal input signalling to the master without broadcasting room state", () => {
+    const room = new KtvRoom({ pairingCode: "1234" });
+    const paired = handleClientCommand(room, unknownRole, {
+      type: "pairSlave",
+      deviceId: "device-a",
+      pairingCode: "1234",
+      displayName: "阿杰"
+    });
+    expect(paired.nextRole).toMatchObject({ kind: "slave" });
+    if (!paired.nextRole || paired.nextRole.kind !== "slave") return;
+
+    const outcome = handleClientCommand(room, paired.nextRole, {
+      type: "sendVocalInputSignalToMaster",
+      pairedSlaveId: paired.nextRole.pairedSlaveId,
+      signal: { kind: "offer", description: { type: "offer", sdp: "offer-sdp" } }
+    });
+
+    expect(outcome.broadcastState).toBe(false);
+    expect(outcome.events).toEqual([]);
+    expect(outcome.targetedEvents).toEqual([
+      {
+        target: "master",
+        event: {
+          type: "vocalInputSignalFromSlave",
+          pairedSlaveId: paired.nextRole.pairedSlaveId,
+          signal: { kind: "offer", description: { type: "offer", sdp: "offer-sdp" } }
+        }
+      }
+    ]);
+  });
+
+  it("routes master vocal input signalling to the target slave", () => {
+    const room = new KtvRoom({ pairingCode: "1234" });
+
+    const outcome = handleClientCommand(room, { kind: "master" }, {
+      type: "sendVocalInputSignalToSlave",
+      pairedSlaveId: "paired-1",
+      signal: { kind: "answer", description: { type: "answer", sdp: "answer-sdp" } }
+    });
+
+    expect(outcome.broadcastState).toBe(false);
+    expect(outcome.targetedEvents).toEqual([
+      {
+        target: { kind: "slave", pairedSlaveId: "paired-1" },
+        event: {
+          type: "vocalInputSignalFromMaster",
+          pairedSlaveId: "paired-1",
+          signal: { kind: "answer", description: { type: "answer", sdp: "answer-sdp" } }
+        }
+      }
+    ]);
+  });
 });
 
 const unknownRole: ConnectionRole = { kind: "unknown" };

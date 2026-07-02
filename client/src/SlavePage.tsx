@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { deviceId } from "./device";
+import { vocalInputAvailabilityLabel } from "./format";
 import { useRoomSocket } from "./roomSocket";
+import { useSlaveVocalInput } from "./slaveVocalInput";
 import { Panel, QueueList, Shell, SlotList, VolumeControl } from "./ui";
 
 export function SlavePage() {
@@ -9,6 +11,7 @@ export function SlavePage() {
   const [pairingCode, setPairingCode] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [search, setSearch] = useState("");
+  const vocalInput = useSlaveVocalInput({ state, pairedSlaveId, lastEvent, send });
 
   useEffect(() => {
     if (status === "open" && pairedSlaveId) {
@@ -65,6 +68,7 @@ export function SlavePage() {
     if (!keyword) return true;
     return `${song.title} ${song.artist}`.toLowerCase().includes(keyword);
   });
+  const vocalInputAvailable = mySlot.vocalInputAvailability === "available";
 
   return (
     <Shell title="点歌端" status={status} error={error}>
@@ -94,6 +98,11 @@ export function SlavePage() {
 
       <section className="dashboard-grid">
         <Panel title="我的演唱">
+          <div className={`vocal-input-status ${mySlot.vocalInputAvailability}`}>
+            <span>麦克风</span>
+            <strong>{vocalInputAvailabilityLabel(mySlot.vocalInputAvailability)}</strong>
+            <small>{vocalInput.message}</small>
+          </div>
           <label>
             昵称
             <input
@@ -109,6 +118,7 @@ export function SlavePage() {
           />
           <button
             className={mySlot.vocalInputState === "singing" ? "active wide-button" : "wide-button"}
+            disabled={!vocalInputAvailable}
             onClick={() =>
               send({
                 type: "setVocalInputState",

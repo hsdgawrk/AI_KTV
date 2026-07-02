@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocket, WebSocketServer } from "ws";
 import type { ClientCommand, ServerEvent } from "../../shared/protocol";
-import { type ConnectionRole, handleClientCommand } from "./commandGateway";
+import { type ConnectionRole, type TargetedServerEvent, handleClientCommand } from "./commandGateway";
 import { KtvRoom } from "./room";
 
 const PORT = Number(process.env.PORT ?? 3000);
@@ -48,6 +48,7 @@ wss.on("connection", (socket) => {
     const outcome = handleClientCommand(room, roles.get(socket) ?? { kind: "unknown" }, command);
     if (outcome.nextRole) roles.set(socket, outcome.nextRole);
     for (const event of outcome.events) send(socket, event);
+    for (const targetedEvent of outcome.targetedEvents ?? []) sendTargeted(targetedEvent);
     if (outcome.broadcastState) broadcastState();
   });
 
@@ -76,15 +77,29 @@ server.listen(PORT, () => {
   console.log(`AI-KTV Server listening on http://localhost:${PORT}`);
 });
 
-function reject(socket: WebSocket, command: ClientCommand, reason: string): void {
-  send(socket, { type: "commandRejected", command: command.type, reason });
-}
-
 function broadcastState(): void {
   const state = room.getState();
   for (const client of wss.clients) {
     if (client.readyState === WebSocket.OPEN) {
       send(client, { type: "roomState", state });
+    }
+  }
+}
+
+function sendTargeted(targetedEvent: TargetedServerEvent): void {
+  for (const [socket, role] of roles.entries()) {
+    if (targetedEvent.target === "master" && role.kind === "master") {
+      send(socket, targetedEvent.event);
+      return;
+    }
+
+    if (
+      typeof targetedEvent.target !== "string" &&
+      role.kind === "slave" &&
+      role.pairedSlaveId === targetedEvent.target.pairedSlaveId
+    ) {
+      send(socket, targetedEvent.event);
+      return;
     }
   }
 }
