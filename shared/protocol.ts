@@ -8,10 +8,31 @@ export type Song = {
   title: string;
   artist: string;
   language?: "zh" | "ja" | "en" | "other";
-  mvUrl: string;
+  mvUrl?: string;
   lyrics: TimedLyricLine[];
   originalVocalUrl: string;
   accompanimentUrl: string;
+};
+
+export type SongSearchResultItem = {
+  id: string;
+  title: string;
+  artist: string;
+  language?: Song["language"];
+};
+
+export type SongLibraryRefreshIssue = {
+  level: "blocking" | "nonBlocking";
+  source: string;
+  message: string;
+};
+
+export type SongLibraryRefreshSummary = {
+  status: "success" | "failed";
+  songCount: number;
+  blockingIssueCount: number;
+  nonBlockingIssueCount: number;
+  issues: SongLibraryRefreshIssue[];
 };
 
 export type TimedLyricLine = {
@@ -52,7 +73,8 @@ export type KtvRoomState = {
   pairingCode: string;
   master: MasterState;
   slaveSlots: [SlaveSlot, SlaveSlot];
-  songLibrary: Song[];
+  songLibraryCount: number;
+  songLibraryVersion: number;
   playbackQueue: QueuedSong[];
   currentSong?: QueuedSong;
   singingMode: SingingMode;
@@ -68,10 +90,12 @@ export type ClientCommand =
   | { type: "registerMaster" }
   | { type: "pairSlave"; deviceId: string; pairingCode: string; displayName?: string }
   | { type: "renameSlave"; pairedSlaveId: string; displayName?: string }
+  | { type: "searchSongs"; pairedSlaveId: string; requestId: string; query: string }
   | { type: "addSongToQueue"; pairedSlaveId: string; songId: string }
   | { type: "pinQueuedSongToNext"; pairedSlaveId: string; queueId: string }
   | { type: "removeQueuedSong"; pairedSlaveId: string; queueId: string }
   | { type: "skipCurrentSong"; pairedSlaveId: string }
+  | { type: "refreshSongLibrary" }
   | { type: "changeSingingMode"; pairedSlaveId: string; singingMode: SingingMode }
   | { type: "setAccompanimentVolume"; pairedSlaveId: string; volume: number }
   | { type: "setVocalVolume"; pairedSlaveId: string; volume: number }
@@ -86,6 +110,15 @@ export type ServerEvent =
   | { type: "roomState"; state: KtvRoomState }
   | { type: "paired"; pairedSlaveId: string; slotNumber: 1 | 2; state: KtvRoomState }
   | { type: "masterAccepted"; state: KtvRoomState }
+  | {
+      type: "songSearchResult";
+      requestId: string;
+      query: string;
+      results: SongSearchResultItem[];
+      hasMore: boolean;
+      songLibraryVersion: number;
+    }
+  | { type: "songLibraryRefreshResult"; summary: SongLibraryRefreshSummary; songLibraryVersion: number }
   | { type: "vocalInputSignalFromSlave"; pairedSlaveId: string; signal: VocalInputSignal }
   | { type: "vocalInputSignalFromMaster"; pairedSlaveId: string; signal: VocalInputSignal }
   | { type: "commandRejected"; command: ClientCommand["type"]; reason: string };

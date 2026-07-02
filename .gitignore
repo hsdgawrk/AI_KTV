@@ -2,5 +2,14 @@ node_modules/
 dist/
 dev.log
 dev.err
+dev-*.log
+dev-*.err
 .env
 .browser-profile/
+songs/**
+!songs/
+!songs/summer-night/
+!songs/summer-night/song.json
+!songs/summer-night/lyrics.json
+!songs/summer-night/original.mp3
+!songs/summer-night/accompaniment.mp3

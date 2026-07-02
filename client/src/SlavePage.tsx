@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { ClientCommand, SongSearchResultItem } from "../../shared/protocol";
 import { deviceId } from "./device";
 import { vocalInputAvailabilityLabel } from "./format";
 import { useRoomSocket } from "./roomSocket";
@@ -11,6 +12,14 @@ export function SlavePage() {
   const [pairingCode, setPairingCode] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [search, setSearch] = useState("");
+  const [songResults, setSongResults] = useState<SongSearchResultItem[]>([]);
+  const [songResultsHasMore, setSongResultsHasMore] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [pendingSongIds, setPendingSongIds] = useState<Set<string>>(() => new Set());
+  const [skipArmed, setSkipArmed] = useState(false);
+  const searchRequestSequence = useRef(0);
+  const latestSearchRequestId = useRef("");
+  const sendThrottledVolume = useThrottledVolumeCommand(send);
   const vocalInput = useSlaveVocalInput({ state, pairedSlaveId, lastEvent, send });
 
   useEffect(() => {
@@ -27,10 +36,35 @@ export function SlavePage() {
     }
   }, [clearError, lastEvent]);
 
+  useEffect(() => {
+    if (lastEvent?.type !== "songSearchResult") return;
+    if (lastEvent.requestId !== latestSearchRequestId.current) return;
+    setSongResults(lastEvent.results);
+    setSongResultsHasMore(lastEvent.hasMore);
+    setSearching(false);
+  }, [lastEvent]);
+
   const mySlot = useMemo(
     () => state?.slaveSlots.find((slot) => slot.pairedSlaveId === pairedSlaveId),
     [pairedSlaveId, state]
   );
+
+  useEffect(() => {
+    if (!state || !mySlot || mySlot.connectionState !== "connected") return;
+    const timeoutId = window.setTimeout(() => {
+      const requestId = `song-search-${++searchRequestSequence.current}`;
+      latestSearchRequestId.current = requestId;
+      setSearching(true);
+      send({ type: "searchSongs", pairedSlaveId, requestId, query: search });
+    }, 200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [mySlot, pairedSlaveId, search, send, state?.songLibraryVersion]);
+
+  useEffect(() => {
+    setPendingSongIds(new Set());
+  }, [state?.playbackQueue, state?.currentSong, lastEvent]);
+
   if (!state || !mySlot || mySlot.connectionState !== "connected") {
     return (
       <Shell title="点歌端" status={status} error={error}>
@@ -63,12 +97,22 @@ export function SlavePage() {
     );
   }
 
-  const filteredSongs = state.songLibrary.filter((song) => {
-    const keyword = search.trim().toLowerCase();
-    if (!keyword) return true;
-    return `${song.title} ${song.artist}`.toLowerCase().includes(keyword);
-  });
+  const queueCountBySongId = new Map<string, number>();
+  for (const queuedSong of state.playbackQueue) {
+    queueCountBySongId.set(queuedSong.song.id, (queueCountBySongId.get(queuedSong.song.id) ?? 0) + 1);
+  }
   const vocalInputAvailable = mySlot.vocalInputAvailability === "available";
+  const skipCurrentSong = () => {
+    if (!state.currentSong) return;
+    if (!skipArmed) {
+      setSkipArmed(true);
+      window.setTimeout(() => setSkipArmed(false), 3_000);
+      return;
+    }
+
+    setSkipArmed(false);
+    send({ type: "skipCurrentSong", pairedSlaveId });
+  };
 
   return (
     <Shell title="点歌端" status={status} error={error}>
@@ -91,8 +135,8 @@ export function SlavePage() {
             伴奏
           </button>
         </div>
-        <button className="danger" onClick={() => send({ type: "skipCurrentSong", pairedSlaveId })}>
-          切歌
+        <button className="danger" disabled={!state.currentSong} onClick={skipCurrentSong}>
+          {skipArmed ? "确认切歌" : "切歌"}
         </button>
       </section>
 
@@ -114,7 +158,7 @@ export function SlavePage() {
           <VolumeControl
             label="人声音量"
             value={mySlot.vocalVolume}
-            onChange={(volume) => send({ type: "setVocalVolume", pairedSlaveId, volume })}
+            onChange={(volume) => sendThrottledVolume({ type: "setVocalVolume", pairedSlaveId, volume })}
           />
           <button
             className={mySlot.vocalInputState === "singing" ? "active wide-button" : "wide-button"}
@@ -134,23 +178,44 @@ export function SlavePage() {
           <VolumeControl
             label="伴奏音量"
             value={state.accompanimentVolume}
-            onChange={(volume) => send({ type: "setAccompanimentVolume", pairedSlaveId, volume })}
+            onChange={(volume) => sendThrottledVolume({ type: "setAccompanimentVolume", pairedSlaveId, volume })}
           />
           <SlotList state={state} />
         </Panel>
         <Panel title="点歌" wide>
           <input className="song-search" placeholder="搜索歌名或歌手" value={search} onChange={(event) => setSearch(event.target.value)} />
+          {searching && <p className="muted song-search-status">搜索中...</p>}
           <div className="song-grid">
-            {filteredSongs.map((song) => (
+            {songResults.map((song) => {
+              const queueCount = queueCountBySongId.get(song.id) ?? 0;
+              const pending = pendingSongIds.has(song.id);
+              return (
               <article className="song-card" key={song.id}>
                 <div>
                   <strong>{song.title}</strong>
-                  <span>{song.artist}</span>
+                  <span>
+                    {song.artist}
+                    {queueCount > 0 ? ` · 队列中 ${queueCount} 次` : ""}
+                  </span>
                 </div>
-                <button onClick={() => send({ type: "addSongToQueue", pairedSlaveId, songId: song.id })}>点歌</button>
+                <button
+                  disabled={pending}
+                  onClick={() => {
+                    setPendingSongIds((previous) => new Set(previous).add(song.id));
+                    send({ type: "addSongToQueue", pairedSlaveId, songId: song.id });
+                  }}
+                >
+                  {pending ? "点歌中" : "点歌"}
+                </button>
               </article>
-            ))}
+              );
+            })}
           </div>
+          {!searching && state.songLibraryCount === 0 && <p className="muted song-empty-state">暂无可点歌曲</p>}
+          {!searching && state.songLibraryCount > 0 && songResults.length === 0 && (
+            <p className="muted song-empty-state">没有匹配歌曲</p>
+          )}
+          {songResultsHasMore && <p className="muted song-empty-state">还有更多结果，请继续输入缩小范围</p>}
         </Panel>
         <Panel title="待唱队列" wide>
           <QueueList state={state} pairedSlaveId={pairedSlaveId} send={send} />
@@ -158,4 +223,35 @@ export function SlavePage() {
       </section>
     </Shell>
   );
+}
+
+function useThrottledVolumeCommand(send: (command: ClientCommand) => void) {
+  const lastSentAt = useRef(0);
+  const trailingCommand = useRef<ClientCommand | undefined>(undefined);
+  const trailingTimer = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    return () => {
+      if (trailingTimer.current) window.clearTimeout(trailingTimer.current);
+    };
+  }, []);
+
+  return (command: Extract<ClientCommand, { type: "setVocalVolume" | "setAccompanimentVolume" }>) => {
+    const now = Date.now();
+    const elapsed = now - lastSentAt.current;
+    if (elapsed >= 120) {
+      lastSentAt.current = now;
+      send(command);
+      return;
+    }
+
+    trailingCommand.current = command;
+    if (trailingTimer.current) window.clearTimeout(trailingTimer.current);
+    trailingTimer.current = window.setTimeout(() => {
+      if (!trailingCommand.current) return;
+      lastSentAt.current = Date.now();
+      send(trailingCommand.current);
+      trailingCommand.current = undefined;
+    }, 120 - elapsed);
+  };
 }

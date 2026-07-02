@@ -5,7 +5,7 @@ import { seededSongLibrary } from "../src/songs";
 
 describe("handleClientCommand", () => {
   it("accepts a master and asks the transport to broadcast state", () => {
-    const room = new KtvRoom({ pairingCode: "1234" });
+    const room = testRoom();
 
     const outcome = handleClientCommand(room, unknownRole, { type: "registerMaster" });
 
@@ -15,7 +15,7 @@ describe("handleClientCommand", () => {
   });
 
   it("pairs a slave and returns the paired event without transport knowledge", () => {
-    const room = new KtvRoom({ pairingCode: "1234" });
+    const room = testRoom();
 
     const outcome = handleClientCommand(room, unknownRole, {
       type: "pairSlave",
@@ -30,7 +30,7 @@ describe("handleClientCommand", () => {
   });
 
   it("rejects master playback reports from non-master connections", () => {
-    const room = new KtvRoom({ pairingCode: "1234" });
+    const room = testRoom();
 
     const outcome = handleClientCommand(room, unknownRole, { type: "reportSongEnd", queueId: "queued-1" });
 
@@ -41,7 +41,7 @@ describe("handleClientCommand", () => {
   });
 
   it("runs room commands through KtvRoom and preserves command rejection reasons", () => {
-    const room = new KtvRoom({ pairingCode: "1234" });
+    const room = testRoom();
 
     const outcome = handleClientCommand(room, unknownRole, {
       type: "addSongToQueue",
@@ -55,8 +55,45 @@ describe("handleClientCommand", () => {
     ]);
   });
 
+  it("returns song search results only to the paired slave command", () => {
+    const room = testRoom();
+    const paired = handleClientCommand(room, unknownRole, {
+      type: "pairSlave",
+      deviceId: "device-a",
+      pairingCode: "1234",
+      displayName: "阿杰"
+    });
+    expect(paired.nextRole).toMatchObject({ kind: "slave" });
+    if (!paired.nextRole || paired.nextRole.kind !== "slave") return;
+
+    const outcome = handleClientCommand(room, paired.nextRole, {
+      type: "searchSongs",
+      pairedSlaveId: paired.nextRole.pairedSlaveId,
+      requestId: "search-1",
+      query: "夏夜"
+    });
+
+    expect(outcome.broadcastState).toBe(false);
+    expect(outcome.events[0]).toMatchObject({
+      type: "songSearchResult",
+      requestId: "search-1",
+      results: [{ id: "song-summer-night", title: "夏夜来信", artist: "林澈" }]
+    });
+  });
+
+  it("rejects song library refresh from non-master connections", () => {
+    const room = testRoom();
+
+    const outcome = handleClientCommand(room, unknownRole, { type: "refreshSongLibrary" });
+
+    expect(outcome.broadcastState).toBe(false);
+    expect(outcome.events).toEqual([
+      { type: "commandRejected", command: "refreshSongLibrary", reason: "只有 Master 可以刷新曲库" }
+    ]);
+  });
+
   it("routes slave vocal input signalling to the master without broadcasting room state", () => {
-    const room = new KtvRoom({ pairingCode: "1234" });
+    const room = testRoom();
     const paired = handleClientCommand(room, unknownRole, {
       type: "pairSlave",
       deviceId: "device-a",
@@ -87,7 +124,7 @@ describe("handleClientCommand", () => {
   });
 
   it("routes master vocal input signalling to the target slave", () => {
-    const room = new KtvRoom({ pairingCode: "1234" });
+    const room = testRoom();
 
     const outcome = handleClientCommand(room, { kind: "master" }, {
       type: "sendVocalInputSignalToSlave",
@@ -110,3 +147,7 @@ describe("handleClientCommand", () => {
 });
 
 const unknownRole: ConnectionRole = { kind: "unknown" };
+
+function testRoom(): KtvRoom {
+  return new KtvRoom({ pairingCode: "1234", songLibrary: seededSongLibrary });
+}

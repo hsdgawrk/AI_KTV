@@ -19,6 +19,16 @@ app.get("/health", (_request, response) => {
   response.json({ ok: true });
 });
 
+app.get("/media/songs/:songId/:assetName", (request, response) => {
+  const filePath = room.resolveSongAsset(request.params.songId, request.params.assetName);
+  if (!filePath) {
+    response.status(404).json({ error: "asset not found" });
+    return;
+  }
+
+  response.sendFile(filePath);
+});
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const clientDist = path.resolve(__dirname, "../../dist/client");
 const publicAssets = path.resolve(__dirname, "../../public");

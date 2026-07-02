@@ -427,6 +427,56 @@ h3 {
   color: var(--text-muted);
 }
 
+.library-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.library-summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.library-summary-row div,
+.library-refresh-summary {
+  display: grid;
+  gap: 4px;
+}
+
+.library-summary-row strong {
+  color: var(--gold);
+  font-size: 30px;
+  line-height: 1;
+}
+
+.library-summary-row span,
+.library-refresh-summary span,
+.library-issue-list small,
+.song-search-status,
+.song-empty-state {
+  color: var(--text-muted);
+}
+
+.library-refresh-summary {
+  border: 1px solid rgba(114, 181, 106, 0.36);
+  border-radius: 6px;
+  background: rgba(114, 181, 106, 0.1);
+  padding: 12px;
+}
+
+.library-refresh-summary.failed {
+  border-color: rgba(214, 169, 67, 0.5);
+  background: rgba(214, 169, 67, 0.1);
+}
+
+.library-issue-list {
+  display: grid;
+  gap: 5px;
+  margin-top: 6px;
+}
+
 .vocal-input-status {
   display: grid;
   gap: 4px;
@@ -571,6 +621,11 @@ h3 {
 
 .song-search {
   margin-bottom: 12px;
+}
+
+.song-search-status,
+.song-empty-state {
+  margin-top: 10px;
 }
 
 .song-card {

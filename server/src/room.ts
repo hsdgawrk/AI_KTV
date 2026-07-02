@@ -5,10 +5,19 @@ import type {
   SingingMode,
   SlaveSlot,
   Song,
+  SongLibraryRefreshSummary,
+  SongSearchResultItem,
   VocalInputAvailability,
   VocalInputState
 } from "../../shared/protocol";
 import { seededSongLibrary } from "./songs";
+import {
+  assetKey,
+  loadSongLibraryFromDirectory,
+  normalizeSearchText,
+  type SongLibrarySnapshot,
+  type SongSearchEntry
+} from "./songLibrary";
 
 const RECONNECTION_GRACE_PERIOD_MS = 60_000;
 const DEFAULT_VOLUME = 70;
@@ -28,8 +37,13 @@ type CommandResult<T = undefined> =
 
 export class KtvRoom {
   private readonly clock: Clock;
+  private readonly loadSongLibrary: () => SongLibrarySnapshot;
   private readonly pairedSlaves = new Map<string, PairedSlaveRecord>();
-  private readonly songLibrary: Song[];
+  private songLibrary: Song[];
+  private songSearchEntries: SongSearchEntry[];
+  private songAssets: Map<string, string>;
+  private songLibraryVersion = 1;
+  private latestSongLibraryRefresh: SongLibraryRefreshSummary;
   private readonly slaveSlots: [SlaveSlot, SlaveSlot];
   private pairingCode: string;
   private masterConnected = false;
@@ -39,9 +53,14 @@ export class KtvRoom {
   private accompanimentVolume = DEFAULT_VOLUME;
   private sequence = 1;
 
-  constructor(options: { clock?: Clock; songLibrary?: Song[]; pairingCode?: string } = {}) {
+  constructor(options: { clock?: Clock; songLibrary?: Song[]; pairingCode?: string; loadSongLibrary?: () => SongLibrarySnapshot } = {}) {
     this.clock = options.clock ?? Date.now;
-    this.songLibrary = options.songLibrary ?? seededSongLibrary;
+    this.loadSongLibrary = options.loadSongLibrary ?? loadSongLibraryFromDirectory;
+    const initialLibrary = options.songLibrary ? snapshotFromSongs(options.songLibrary) : this.loadSongLibrary();
+    this.songLibrary = initialLibrary.songs;
+    this.songSearchEntries = initialLibrary.searchEntries;
+    this.songAssets = initialLibrary.assets;
+    this.latestSongLibraryRefresh = initialLibrary.summary;
     this.pairingCode = options.pairingCode ?? this.generatePairingCode();
     this.slaveSlots = [this.createEmptySlot(1), this.createEmptySlot(2)];
   }
@@ -58,7 +77,8 @@ export class KtvRoom {
       pairingCode: this.pairingCode,
       master: { connected: this.masterConnected },
       slaveSlots: this.slaveSlots.map((slot) => ({ ...slot })) as [SlaveSlot, SlaveSlot],
-      songLibrary: [...this.songLibrary],
+      songLibraryCount: this.songLibrary.length,
+      songLibraryVersion: this.songLibraryVersion,
       playbackQueue: this.playbackQueue.map(snapshotQueuedSong),
       currentSong: this.currentSong ? snapshotQueuedSong(this.currentSong) : undefined,
       singingMode: this.singingMode,
@@ -73,6 +93,58 @@ export class KtvRoom {
 
     this.masterConnected = true;
     return { ok: true, value: undefined };
+  }
+
+  getLatestSongLibraryRefresh(): SongLibraryRefreshSummary {
+    return {
+      ...this.latestSongLibraryRefresh,
+      issues: this.latestSongLibraryRefresh.issues.map((issue) => ({ ...issue }))
+    };
+  }
+
+  refreshSongLibrary(): CommandResult<SongLibraryRefreshSummary> {
+    const nextLibrary = this.loadSongLibrary();
+    const keepPrevious = this.songLibrary.length > 0 && nextLibrary.songs.length === 0;
+    if (!keepPrevious) {
+      this.songLibrary = nextLibrary.songs;
+      this.songSearchEntries = nextLibrary.searchEntries;
+      this.songAssets = nextLibrary.assets;
+      this.songLibraryVersion += 1;
+      this.latestSongLibraryRefresh = nextLibrary.summary;
+      return { ok: true, value: this.getLatestSongLibraryRefresh() };
+    }
+
+    this.latestSongLibraryRefresh = {
+      ...nextLibrary.summary,
+      status: "failed",
+      songCount: this.songLibrary.length
+    };
+    return { ok: true, value: this.getLatestSongLibraryRefresh() };
+  }
+
+  searchSongs(pairedSlaveId: string, query: string): CommandResult<{
+    results: SongSearchResultItem[];
+    hasMore: boolean;
+    songLibraryVersion: number;
+  }> {
+    const record = this.requireConnectedSlave(pairedSlaveId);
+    if (!record.ok) return record;
+
+    const normalizedQuery = normalizeSearchText(query);
+    const matches = normalizedQuery ? this.searchRanked(normalizedQuery) : [...this.songSearchEntries];
+    const limited = matches.slice(0, 50);
+    return {
+      ok: true,
+      value: {
+        results: limited.map((entry) => ({ ...entry.summary })),
+        hasMore: matches.length > limited.length,
+        songLibraryVersion: this.songLibraryVersion
+      }
+    };
+  }
+
+  resolveSongAsset(songId: string, assetName: string): string | undefined {
+    return this.songAssets.get(assetKey(songId, assetName));
   }
 
   disconnectMaster(): void {
@@ -224,6 +296,7 @@ export class KtvRoom {
   skipCurrentSong(pairedSlaveId: string): CommandResult {
     const record = this.requireConnectedSlave(pairedSlaveId);
     if (!record.ok) return record;
+    if (!this.currentSong) return { ok: false, reason: "当前没有播放歌曲" };
 
     this.currentSong = this.playbackQueue.shift();
     return { ok: true, value: undefined };
@@ -307,6 +380,14 @@ export class KtvRoom {
     this.currentSong = this.playbackQueue.shift();
   }
 
+  private searchRanked(normalizedQuery: string): SongSearchEntry[] {
+    return this.songSearchEntries
+      .map((entry) => ({ entry, rank: searchRank(entry, normalizedQuery) }))
+      .filter((candidate) => candidate.rank !== undefined)
+      .sort((left, right) => left.rank! - right.rank! || compareSearchEntryStable(left.entry, right.entry))
+      .map((candidate) => candidate.entry);
+  }
+
   private requireConnectedSlave(pairedSlaveId: string): CommandResult<PairedSlaveRecord> {
     this.expireDisconnectedSlaves();
     const record = this.pairedSlaves.get(pairedSlaveId);
@@ -366,6 +447,54 @@ function clampVolume(volume: number): number {
 function snapshotQueuedSong(queuedSong: QueuedSong): QueuedSong {
   return {
     ...queuedSong,
+    song: {
+      ...queuedSong.song,
+      lyrics: queuedSong.song.lyrics.map((line) => ({ ...line }))
+    },
     attribution: { ...queuedSong.attribution }
   };
+}
+
+function snapshotFromSongs(songs: Song[]): SongLibrarySnapshot {
+  const searchEntries = songs.map((song) => {
+    const stableSortKey = normalizeSearchText(`${song.title} ${song.artist} ${song.id}`);
+    return {
+      song,
+      summary: {
+        id: song.id,
+        title: song.title,
+        artist: song.artist,
+        ...(song.language ? { language: song.language } : {})
+      },
+      stableSortKey,
+      normalizedTitle: normalizeSearchText(song.title),
+      normalizedArtist: normalizeSearchText(song.artist),
+      normalizedSearchText: normalizeSearchText(`${song.title} ${song.artist}`)
+    };
+  });
+  searchEntries.sort(compareSearchEntryStable);
+  return {
+    songs: [...songs],
+    searchEntries,
+    assets: new Map(),
+    summary: {
+      status: songs.length > 0 ? "success" : "failed",
+      songCount: songs.length,
+      blockingIssueCount: 0,
+      nonBlockingIssueCount: 0,
+      issues: []
+    }
+  };
+}
+
+function searchRank(entry: SongSearchEntry, normalizedQuery: string): number | undefined {
+  if (entry.normalizedTitle.startsWith(normalizedQuery)) return 0;
+  if (entry.normalizedTitle.includes(normalizedQuery)) return 1;
+  if (entry.normalizedArtist.includes(normalizedQuery)) return 2;
+  if (entry.normalizedSearchText.includes(normalizedQuery)) return 3;
+  return undefined;
+}
+
+function compareSearchEntryStable(left: SongSearchEntry, right: SongSearchEntry): number {
+  return left.stableSortKey.localeCompare(right.stableSortKey, "zh-Hans") || left.song.id.localeCompare(right.song.id);
 }

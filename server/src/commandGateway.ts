@@ -26,7 +26,14 @@ export function handleClientCommand(room: KtvRoom, role: ConnectionRole, command
       if (!result.ok) return rejected(command, result.reason);
       return {
         nextRole: { kind: "master" },
-        events: [{ type: "masterAccepted", state: room.getState() }],
+        events: [
+          { type: "masterAccepted", state: room.getState() },
+          {
+            type: "songLibraryRefreshResult",
+            summary: room.getLatestSongLibraryRefresh(),
+            songLibraryVersion: room.getState().songLibraryVersion
+          }
+        ],
         broadcastState: true
       };
     }
@@ -48,6 +55,8 @@ export function handleClientCommand(room: KtvRoom, role: ConnectionRole, command
     }
     case "renameSlave":
       return runRoomCommand(command, () => room.renameSlave(command.pairedSlaveId, command.displayName));
+    case "searchSongs":
+      return runSongSearchCommand(room, role, command);
     case "addSongToQueue":
       return runRoomCommand(command, () => room.addSongToQueue(command.pairedSlaveId, command.songId));
     case "pinQueuedSongToNext":
@@ -56,6 +65,8 @@ export function handleClientCommand(room: KtvRoom, role: ConnectionRole, command
       return runRoomCommand(command, () => room.removeQueuedSong(command.pairedSlaveId, command.queueId));
     case "skipCurrentSong":
       return runRoomCommand(command, () => room.skipCurrentSong(command.pairedSlaveId));
+    case "refreshSongLibrary":
+      return runRefreshSongLibraryCommand(room, role, command);
     case "changeSingingMode":
       return runRoomCommand(command, () => room.changeSingingMode(command.pairedSlaveId, command.singingMode));
     case "setAccompanimentVolume":
@@ -77,6 +88,51 @@ export function handleClientCommand(room: KtvRoom, role: ConnectionRole, command
     case "reportUnplayableSong":
       return runMasterCommand(role, command, () => room.reportUnplayableSong(command.queueId));
   }
+}
+
+function runSongSearchCommand(
+  room: KtvRoom,
+  role: ConnectionRole,
+  command: Extract<ClientCommand, { type: "searchSongs" }>
+): CommandOutcome {
+  if (role.kind !== "slave" || role.pairedSlaveId !== command.pairedSlaveId) {
+    return rejected(command, "只有对应 Slave 可以搜索曲库");
+  }
+
+  const result = room.searchSongs(command.pairedSlaveId, command.query);
+  if (!result.ok) return rejected(command, result.reason);
+  return {
+    events: [
+      {
+        type: "songSearchResult",
+        requestId: command.requestId,
+        query: command.query,
+        results: result.value.results,
+        hasMore: result.value.hasMore,
+        songLibraryVersion: result.value.songLibraryVersion
+      }
+    ],
+    broadcastState: false
+  };
+}
+
+function runRefreshSongLibraryCommand(
+  room: KtvRoom,
+  role: ConnectionRole,
+  command: Extract<ClientCommand, { type: "refreshSongLibrary" }>
+): CommandOutcome {
+  if (role.kind !== "master") {
+    return rejected(command, "只有 Master 可以刷新曲库");
+  }
+
+  const previousVersion = room.getState().songLibraryVersion;
+  const result = room.refreshSongLibrary();
+  if (!result.ok) return rejected(command, result.reason);
+  const nextVersion = room.getState().songLibraryVersion;
+  return {
+    events: [{ type: "songLibraryRefreshResult", summary: result.value, songLibraryVersion: nextVersion }],
+    broadcastState: nextVersion !== previousVersion
+  };
 }
 
 function runSlaveSignalCommand(

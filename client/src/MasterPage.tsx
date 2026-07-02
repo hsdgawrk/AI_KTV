@@ -1,5 +1,5 @@
-import { useEffect, useRef } from "react";
-import type { KtvRoomState } from "../../shared/protocol";
+import { useEffect, useRef, useState } from "react";
+import type { KtvRoomState, SongLibraryRefreshSummary } from "../../shared/protocol";
 import { formatTime, modeLabel } from "./format";
 import { LyricStage } from "./lyrics";
 import { type MasterPlayback, useMasterPlayback } from "./masterPlayback";
@@ -9,6 +9,8 @@ import { Panel, PlaybackNotice, PlaybackProgress, PlaybackStatusPanel, QueueList
 
 export function MasterPage() {
   const { state, status, error, lastEvent, send } = useRoomSocket();
+  const [refreshingSongLibrary, setRefreshingSongLibrary] = useState(false);
+  const [songLibraryRefresh, setSongLibraryRefresh] = useState<SongLibraryRefreshSummary>();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const playback = useMasterPlayback(state, send, audioRef);
   const vocalInput = useMasterVocalInput({ state, lastEvent, send });
@@ -21,6 +23,13 @@ export function MasterPage() {
   useEffect(() => {
     if (status === "open") send({ type: "registerMaster" });
   }, [send, status]);
+
+  useEffect(() => {
+    if (lastEvent?.type === "songLibraryRefreshResult") {
+      setRefreshingSongLibrary(false);
+      setSongLibraryRefresh(lastEvent.summary);
+    }
+  }, [lastEvent]);
 
   if (!state) {
     return (
@@ -92,12 +101,61 @@ export function MasterPage() {
           <Panel title="播放状态">
             <PlaybackStatusPanel playback={playback} onResume={unlockRoomAudio} />
           </Panel>
+          <Panel title="曲库">
+            <SongLibraryPanel
+              state={state}
+              refreshing={refreshingSongLibrary}
+              summary={songLibraryRefresh}
+              onRefresh={() => {
+                setRefreshingSongLibrary(true);
+                send({ type: "refreshSongLibrary" });
+              }}
+            />
+          </Panel>
           <Panel title="待唱队列" wide>
             <QueueList state={state} />
           </Panel>
         </section>
       )}
     </Shell>
+  );
+}
+
+function SongLibraryPanel(props: {
+  state: KtvRoomState;
+  refreshing: boolean;
+  summary?: SongLibraryRefreshSummary;
+  onRefresh: () => void;
+}) {
+  return (
+    <div className="library-panel">
+      <div className="library-summary-row">
+        <div>
+          <strong>{props.state.songLibraryCount}</strong>
+          <span>可点歌曲</span>
+        </div>
+        <button disabled={props.refreshing} onClick={props.onRefresh}>
+          {props.refreshing ? "正在刷新" : "刷新曲库"}
+        </button>
+      </div>
+      {props.summary && (
+        <div className={`library-refresh-summary ${props.summary.status}`}>
+          <strong>{props.summary.status === "success" ? "刷新完成" : "刷新失败"}</strong>
+          <span>
+            可用 {props.summary.songCount} 首 · 阻断 {props.summary.blockingIssueCount} · 提醒 {props.summary.nonBlockingIssueCount}
+          </span>
+          {props.summary.issues.length > 0 && (
+            <div className="library-issue-list">
+              {props.summary.issues.map((issue, index) => (
+                <small key={`${issue.source}-${issue.message}-${index}`}>
+                  {issue.level === "blocking" ? "阻断" : "提醒"} · {issue.source} · {issue.message}
+                </small>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
