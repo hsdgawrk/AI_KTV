@@ -418,13 +418,29 @@ h3 {
   gap: 14px;
 }
 
-.playback-status-panel div {
+.playback-status-panel div,
+.vocal-output-status div {
   display: grid;
   gap: 6px;
 }
 
-.playback-status-panel span {
+.playback-status-panel span,
+.vocal-output-status span {
   color: var(--text-muted);
+}
+
+.vocal-output-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 54px;
+  border-top: 1px solid rgba(244, 239, 227, 0.12);
+  padding-top: 14px;
+}
+
+.vocal-output-status.blocked strong {
+  color: #f0c86e;
 }
 
 .library-panel {

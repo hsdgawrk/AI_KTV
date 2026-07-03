@@ -1,5 +1,7 @@
 import express from "express";
-import { createServer } from "node:http";
+import fs from "node:fs";
+import { createServer as createHttpServer } from "node:http";
+import { createServer as createHttpsServer } from "node:https";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocket, WebSocketServer } from "ws";
@@ -10,7 +12,7 @@ import { KtvRoom } from "./room";
 const PORT = Number(process.env.PORT ?? 3000);
 const room = new KtvRoom();
 const app = express();
-const server = createServer(app);
+const server = createNodeServer(app);
 const wss = new WebSocketServer({ server, path: "/ws" });
 
 const roles = new Map<WebSocket, ConnectionRole>();
@@ -84,8 +86,28 @@ setInterval(() => {
 }, 5_000);
 
 server.listen(PORT, () => {
-  console.log(`AI-KTV Server listening on http://localhost:${PORT}`);
+  const protocol = process.env.AI_KTV_SERVER_HTTPS === "1" ? "https" : "http";
+  console.log(`AI-KTV Server listening on ${protocol}://localhost:${PORT}`);
 });
+
+function createNodeServer(handler: express.Express) {
+  if (process.env.AI_KTV_SERVER_HTTPS !== "1") {
+    return createHttpServer(handler);
+  }
+
+  const pfxPath = path.resolve(process.env.AI_KTV_HTTPS_PFX ?? ".cert/ai-ktv-local.pfx");
+  if (!fs.existsSync(pfxPath)) {
+    throw new Error(`Missing HTTPS certificate: ${pfxPath}. Run npm run cert:local first.`);
+  }
+
+  return createHttpsServer(
+    {
+      pfx: fs.readFileSync(pfxPath),
+      passphrase: process.env.AI_KTV_HTTPS_PFX_PASSPHRASE ?? "ai-ktv-local-dev"
+    },
+    handler
+  );
+}
 
 function broadcastState(): void {
   const state = room.getState();

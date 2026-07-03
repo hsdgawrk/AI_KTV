@@ -8,12 +8,12 @@ import { useRoomSocket } from "./roomSocket";
 import { Panel, PlaybackNotice, PlaybackProgress, PlaybackStatusPanel, QueueList, Shell, SlotList } from "./ui";
 
 export function MasterPage() {
-  const { state, status, error, lastEvent, songLibraryRefreshEvent, send } = useRoomSocket();
+  const { state, status, error, events, songLibraryRefreshEvent, send } = useRoomSocket();
   const [refreshingSongLibrary, setRefreshingSongLibrary] = useState(false);
   const [songLibraryRefresh, setSongLibraryRefresh] = useState<SongLibraryRefreshSummary>();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const playback = useMasterPlayback(state, send, audioRef);
-  const vocalInput = useMasterVocalInput({ state, lastEvent, send });
+  const vocalInput = useMasterVocalInput({ state, events, send });
   const isSingingView = Boolean(state?.currentSong);
   const unlockRoomAudio = () => {
     playback.unlockAudio();
@@ -90,7 +90,9 @@ export function MasterPage() {
       {isSingingView ? (
         <section className="compact-room-strip">
           <span>{playback.message}</span>
+          <span>{vocalInput.message}</span>
           <span>{formatTime(playback.currentTime)} / {formatTime(playback.duration)}</span>
+          {vocalInput.outputStatus === "blocked" && <button onClick={vocalInput.resumeOutput}>启用人声</button>}
           {playback.status === "blocked" && <button onClick={unlockRoomAudio}>启用声音</button>}
         </section>
       ) : (
@@ -100,6 +102,7 @@ export function MasterPage() {
           </Panel>
           <Panel title="播放状态">
             <PlaybackStatusPanel playback={playback} onResume={unlockRoomAudio} />
+            <VocalOutputStatus status={vocalInput.outputStatus} message={vocalInput.message} onResume={vocalInput.resumeOutput} />
           </Panel>
           <Panel title="曲库">
             <SongLibraryPanel
@@ -118,6 +121,22 @@ export function MasterPage() {
         </section>
       )}
     </Shell>
+  );
+}
+
+function VocalOutputStatus(props: {
+  status: ReturnType<typeof useMasterVocalInput>["outputStatus"];
+  message: string;
+  onResume: () => void;
+}) {
+  return (
+    <div className={`vocal-output-status ${props.status}`}>
+      <div>
+        <strong>{props.message}</strong>
+        <span>Slave 人声监听</span>
+      </div>
+      {props.status === "blocked" && <button onClick={props.onResume}>启用人声</button>}
+    </div>
   );
 }
 

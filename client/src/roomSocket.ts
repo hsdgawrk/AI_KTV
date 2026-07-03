@@ -3,13 +3,19 @@ import type { ClientCommand, KtvRoomState, ServerEvent } from "../../shared/prot
 
 type PairedEvent = Extract<ServerEvent, { type: "paired" }>;
 type SongLibraryRefreshEvent = Extract<ServerEvent, { type: "songLibraryRefreshResult" }>;
+export type RoomSocketEvent = {
+  id: number;
+  event: ServerEvent;
+};
 
 export function useRoomSocket() {
   const socketRef = useRef<WebSocket | null>(null);
+  const eventIdRef = useRef(0);
   const [state, setState] = useState<KtvRoomState>();
   const [status, setStatus] = useState("connecting");
   const [error, setError] = useState<string>();
   const [lastEvent, setLastEvent] = useState<ServerEvent>();
+  const [events, setEvents] = useState<RoomSocketEvent[]>([]);
   const [pairedEvent, setPairedEvent] = useState<PairedEvent>();
   const [songLibraryRefreshEvent, setSongLibraryRefreshEvent] = useState<SongLibraryRefreshEvent>();
 
@@ -23,7 +29,9 @@ export function useRoomSocket() {
     socket.addEventListener("error", () => setError("连接 Server 失败"));
     socket.addEventListener("message", (message) => {
       const event = JSON.parse(String(message.data)) as ServerEvent;
+      const socketEvent = { id: ++eventIdRef.current, event };
       setLastEvent(event);
+      setEvents((previous) => [...previous.slice(-99), socketEvent]);
       if ("state" in event) setState(event.state);
       if (event.type === "paired") setPairedEvent(event);
       if (event.type === "songLibraryRefreshResult") setSongLibraryRefreshEvent(event);
@@ -53,6 +61,7 @@ export function useRoomSocket() {
     status,
     error,
     lastEvent,
+    events,
     pairedEvent,
     songLibraryRefreshEvent,
     send,

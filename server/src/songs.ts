@@ -1,6 +1,7 @@
 import type { Song } from "../../shared/protocol";
 
-const seededAudioUrl = "/media/audio/summer-night-original.mp3";
+const seededOriginalVocalUrl = "/media/songs/song-summer-night/originalVocal";
+const seededAccompanimentUrl = "/media/songs/song-summer-night/accompaniment";
 
 export const seededSongLibrary: Song[] = [
   {
@@ -14,8 +15,8 @@ export const seededSongLibrary: Song[] = [
       { startTimeMs: 8_000, text: "你在副歌里回望" },
       { startTimeMs: 16_000, text: "这一句唱给月亮" }
     ],
-    originalVocalUrl: seededAudioUrl,
-    accompanimentUrl: seededAudioUrl
+    originalVocalUrl: seededOriginalVocalUrl,
+    accompanimentUrl: seededAccompanimentUrl
   },
   {
     id: "song-neon-harbor",
@@ -28,8 +29,8 @@ export const seededSongLibrary: Song[] = [
       { startTimeMs: 7_000, text: "人群散成光点" },
       { startTimeMs: 14_000, text: "下一拍就靠岸" }
     ],
-    originalVocalUrl: seededAudioUrl,
-    accompanimentUrl: seededAudioUrl
+    originalVocalUrl: seededOriginalVocalUrl,
+    accompanimentUrl: seededAccompanimentUrl
   },
   {
     id: "song-after-rain",
@@ -42,8 +43,8 @@ export const seededSongLibrary: Song[] = [
       { startTimeMs: 7_500, text: "鼓点敲开旧旋律" },
       { startTimeMs: 15_000, text: "我把回忆唱下去" }
     ],
-    originalVocalUrl: seededAudioUrl,
-    accompanimentUrl: seededAudioUrl
+    originalVocalUrl: seededOriginalVocalUrl,
+    accompanimentUrl: seededAccompanimentUrl
   },
   {
     id: "song-moon-road",
@@ -56,7 +57,7 @@ export const seededSongLibrary: Song[] = [
       { startTimeMs: 8_000, text: "把告别留给站牌" },
       { startTimeMs: 16_000, text: "下一站有人等待" }
     ],
-    originalVocalUrl: seededAudioUrl,
-    accompanimentUrl: seededAudioUrl
+    originalVocalUrl: seededOriginalVocalUrl,
+    accompanimentUrl: seededAccompanimentUrl
   }
 ];

@@ -1,51 +1,54 @@
-import { useCallback, useEffect, useRef } from "react";
-import type { ClientCommand, KtvRoomState, ServerEvent } from "../../shared/protocol";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { ClientCommand, KtvRoomState } from "../../shared/protocol";
+import type { RoomSocketEvent } from "./roomSocket";
 
 type VocalPeer = {
   peer: RTCPeerConnection;
   stream: MediaStream;
   pendingIceCandidates: RTCIceCandidateInit[];
-  source?: MediaStreamAudioSourceNode;
-  gain?: GainNode;
+  audio: HTMLAudioElement;
 };
 
 export type MasterVocalInput = {
   resumeOutput: () => void;
+  outputStatus: "idle" | "ready" | "blocked" | "playing";
+  message: string;
 };
 
 export function useMasterVocalInput(options: {
   state: KtvRoomState | undefined;
-  lastEvent: ServerEvent | undefined;
+  events: RoomSocketEvent[];
   send: (command: ClientCommand) => void;
 }): MasterVocalInput {
-  const { state, lastEvent, send } = options;
-  const audioContextRef = useRef<AudioContext | null>(null);
+  const { state, events, send } = options;
   const peersRef = useRef(new Map<string, VocalPeer>());
   const stateRef = useRef<KtvRoomState | undefined>(state);
+  const lastProcessedEventIdRef = useRef(0);
+  const [outputStatus, setOutputStatus] = useState<MasterVocalInput["outputStatus"]>("idle");
+  const [message, setMessage] = useState("等待人声");
 
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
 
-  const audioContext = useCallback((): AudioContext | undefined => {
-    const AudioContextConstructor =
-      window.AudioContext ?? (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!AudioContextConstructor) return undefined;
-    if (!audioContextRef.current) audioContextRef.current = new AudioContextConstructor();
-    return audioContextRef.current;
-  }, []);
-
   const resumeOutput = useCallback(() => {
-    audioContextRef.current?.resume().catch((error: unknown) => {
-      console.warn("AI-KTV vocal output resume failed", error);
-    });
+    if (peersRef.current.size === 0) {
+      setOutputStatus("ready");
+      setMessage("人声输出已就绪");
+      return;
+    }
+
+    for (const record of peersRef.current.values()) {
+      void playVocalAudio(record, setOutputStatus, setMessage);
+    }
   }, []);
 
   const closePeer = useCallback((pairedSlaveId: string) => {
     const existing = peersRef.current.get(pairedSlaveId);
     if (!existing) return;
-    existing.source?.disconnect();
-    existing.gain?.disconnect();
+    existing.audio.pause();
+    existing.audio.srcObject = null;
+    existing.audio.remove();
     existing.peer.close();
     peersRef.current.delete(pairedSlaveId);
   }, []);
@@ -55,7 +58,16 @@ export function useMasterVocalInput(options: {
       closePeer(pairedSlaveId);
       const peer = new RTCPeerConnection({ iceServers: [] });
       const stream = new MediaStream();
-      const record: VocalPeer = { peer, stream, pendingIceCandidates: [] };
+      const audio = document.createElement("audio");
+      audio.autoplay = true;
+      audio.setAttribute("playsinline", "");
+      audio.muted = false;
+      audio.volume = 0;
+      audio.style.display = "none";
+      audio.srcObject = stream;
+      document.body.append(audio);
+
+      const record: VocalPeer = { peer, stream, pendingIceCandidates: [], audio };
       peersRef.current.set(pairedSlaveId, record);
 
       peer.addEventListener("icecandidate", (event) => {
@@ -68,56 +80,56 @@ export function useMasterVocalInput(options: {
       });
 
       peer.addEventListener("track", (event) => {
-        const context = audioContext();
-        if (!context) return;
         for (const track of event.streams[0]?.getAudioTracks() ?? [event.track]) {
           if (!record.stream.getTracks().includes(track)) record.stream.addTrack(track);
         }
 
-        if (!record.source) {
-          record.source = context.createMediaStreamSource(record.stream);
-          record.gain = context.createGain();
-          record.gain.gain.value = 0;
-          record.source.connect(record.gain).connect(context.destination);
-          applyVocalGain(record, pairedSlaveId, stateRef.current);
-        }
+        applyVocalOutput(record, pairedSlaveId, stateRef.current);
+        void playVocalAudio(record, setOutputStatus, setMessage);
       });
 
       return record;
     },
-    [audioContext, closePeer, send]
+    [closePeer, send]
   );
 
   useEffect(() => {
-    if (!lastEvent || lastEvent.type !== "vocalInputSignalFromSlave") return;
-    const { pairedSlaveId, signal } = lastEvent;
+    const nextEvents = events.filter((socketEvent) => socketEvent.id > lastProcessedEventIdRef.current);
+    if (nextEvents.length === 0) return;
+    lastProcessedEventIdRef.current = nextEvents[nextEvents.length - 1].id;
 
-    if (signal.kind === "offer") {
-      const record = createPeer(pairedSlaveId);
-      record.peer
-        .setRemoteDescription(signal.description)
-        .then(() => flushPendingIceCandidates(record))
-        .then(() => record.peer.createAnswer())
-        .then((answer) => record.peer.setLocalDescription(answer).then(() => answer))
-        .then((answer) => {
-          send({
-            type: "sendVocalInputSignalToSlave",
-            pairedSlaveId,
-            signal: { kind: "answer", description: answer }
+    for (const socketEvent of nextEvents) {
+      const event = socketEvent.event;
+      if (event.type !== "vocalInputSignalFromSlave") continue;
+      const { pairedSlaveId, signal } = event;
+
+      if (signal.kind === "offer") {
+        const record = createPeer(pairedSlaveId);
+        record.peer
+          .setRemoteDescription(signal.description)
+          .then(() => flushPendingIceCandidates(record))
+          .then(() => record.peer.createAnswer())
+          .then((answer) => record.peer.setLocalDescription(answer).then(() => answer))
+          .then((answer) => {
+            send({
+              type: "sendVocalInputSignalToSlave",
+              pairedSlaveId,
+              signal: { kind: "answer", description: answer }
+            });
+          })
+          .catch((error: unknown) => {
+            console.warn("AI-KTV vocal input offer rejected", error);
+            closePeer(pairedSlaveId);
           });
-        })
-        .catch((error: unknown) => {
-          console.warn("AI-KTV vocal input offer rejected", error);
-          closePeer(pairedSlaveId);
-        });
-      return;
-    }
+        continue;
+      }
 
-    if (signal.kind === "iceCandidate") {
-      const record = peersRef.current.get(pairedSlaveId);
-      if (record) addOrQueueIceCandidate(record, signal.candidate);
+      if (signal.kind === "iceCandidate") {
+        const record = peersRef.current.get(pairedSlaveId);
+        if (record) addOrQueueIceCandidate(record, signal.candidate);
+      }
     }
-  }, [closePeer, createPeer, lastEvent, send]);
+  }, [closePeer, createPeer, events, send]);
 
   useEffect(() => {
     const connectedSlaveIds = new Set(
@@ -133,20 +145,34 @@ export function useMasterVocalInput(options: {
     for (const slot of state?.slaveSlots ?? []) {
       if (!slot.pairedSlaveId) continue;
       const record = peersRef.current.get(slot.pairedSlaveId);
-      if (!record?.gain) continue;
-      applyVocalGain(record, slot.pairedSlaveId, state);
+      if (!record) continue;
+      applyVocalOutput(record, slot.pairedSlaveId, state);
     }
   }, [closePeer, state?.slaveSlots]);
 
   useEffect(() => {
     return () => {
       for (const pairedSlaveId of peersRef.current.keys()) closePeer(pairedSlaveId);
-      audioContextRef.current?.close().catch(() => undefined);
-      audioContextRef.current = null;
     };
   }, [closePeer]);
 
-  return { resumeOutput };
+  return { resumeOutput, outputStatus, message };
+}
+
+async function playVocalAudio(
+  record: VocalPeer,
+  setOutputStatus: (status: MasterVocalInput["outputStatus"]) => void,
+  setMessage: (message: string) => void
+): Promise<void> {
+  try {
+    await record.audio.play();
+    setOutputStatus("playing");
+    setMessage("人声输出中");
+  } catch (error: unknown) {
+    setOutputStatus("blocked");
+    setMessage("需要启用人声输出");
+    console.warn("AI-KTV vocal output play failed", error);
+  }
 }
 
 function addOrQueueIceCandidate(record: VocalPeer, candidate: RTCIceCandidateInit): void {
@@ -171,14 +197,12 @@ function flushPendingIceCandidates(record: VocalPeer): Promise<void[]> {
   );
 }
 
-function applyVocalGain(record: VocalPeer, pairedSlaveId: string, state: KtvRoomState | undefined): void {
-  if (!record.gain) return;
+function applyVocalOutput(record: VocalPeer, pairedSlaveId: string, state: KtvRoomState | undefined): void {
   const slot = state?.slaveSlots.find((candidate) => candidate.pairedSlaveId === pairedSlaveId);
-  const targetGain =
+  record.audio.volume =
     slot?.connectionState === "connected" &&
     slot.vocalInputAvailability === "available" &&
     slot.vocalInputState === "singing"
       ? slot.vocalVolume / 100
       : 0;
-  record.gain.gain.setTargetAtTime(targetGain, record.gain.context.currentTime, 0.03);
 }

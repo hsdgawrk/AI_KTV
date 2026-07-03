@@ -15,6 +15,34 @@ npm run dev
 - **Master**: `http://localhost:5173/master`
 - **Slave**: `http://localhost:5173/slave`
 
+如果 **Slave** 需要在局域网手机或平板上使用麦克风，必须用 HTTPS 访问，因为浏览器只允许 secure context 调用麦克风：
+
+```bash
+npm run cert:local
+npm run serve:https
+```
+
+然后在 Slave 设备上安装并信任 `.cert/ai-ktv-local.cer`，再打开：
+
+`.cert/ai-ktv-local.cer` 是本地 Root CA 证书。手机和平板上只安装还不够，必须在系统设置里启用完全信任：
+
+- iOS/iPadOS: 安装描述文件后，到“设置 > 通用 > 关于本机 > 证书信任设置”启用完全信任。
+- Android: 安装为 CA 证书；不同系统入口通常在“安全 > 加密与凭据 > 安装证书 > CA 证书”。
+- Windows: 运行 `npm run cert:local:trust` 会把 Root CA 信任到当前用户。
+
+访问地址必须使用证书生成时列出的局域网 IP，例如：
+
+```text
+https://<本机局域网IP>:3443/slave
+https://<本机局域网IP>:3443/master
+```
+
+Windows 本机浏览器也需要信任证书时，可以运行：
+
+```bash
+npm run cert:local:trust
+```
+
 在电视、Xbox Edge 或普通浏览器上打开 **Master** 后，先在主屏按一次“启用主屏声音”。同一页面会话内，之后 **Slave** 点第一首歌会直接播放。
 
 如果 Windows 桌面调试时希望自动放开浏览器自动播放限制，先保持 `npm run dev` 运行，再用下面的命令打开主屏：
@@ -30,6 +58,9 @@ npm run open:master
 ```bash
 npm test
 npm run build
+npm run cert:local
+npm run dev:https
+npm run serve:https
 npm run open:master
 ```
 

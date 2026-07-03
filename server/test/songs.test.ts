@@ -1,19 +1,22 @@
-import { existsSync } from "node:fs";
-import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { assetKey, loadSongLibraryFromDirectory } from "../src/songLibrary";
 import { seededSongLibrary } from "../src/songs";
 
 describe("seededSongLibrary", () => {
-  it("only references local audio assets that exist", () => {
+  it("only references local song assets that exist", () => {
+    const localAssets = loadSongLibraryFromDirectory().assets;
+
     for (const song of seededSongLibrary) {
-      expect(localPublicAssetExists(song.originalVocalUrl), `${song.id} original vocal`).toBe(true);
-      expect(localPublicAssetExists(song.accompanimentUrl), `${song.id} accompaniment`).toBe(true);
+      expect(localSongAssetExists(song.originalVocalUrl, localAssets), `${song.id} original vocal`).toBe(true);
+      expect(localSongAssetExists(song.accompanimentUrl, localAssets), `${song.id} accompaniment`).toBe(true);
     }
   });
 });
 
-function localPublicAssetExists(assetUrl: string): boolean {
-  if (!assetUrl.startsWith("/")) return false;
-  const relativePath = assetUrl.slice(1).split("/");
-  return existsSync(path.resolve(process.cwd(), "public", ...relativePath));
+function localSongAssetExists(assetUrl: string, localAssets: Map<string, string>): boolean {
+  const match = /^\/media\/songs\/([^/]+)\/([^/]+)$/.exec(assetUrl);
+  if (!match) return false;
+
+  const [, songId, assetName] = match;
+  return localAssets.has(assetKey(songId, assetName));
 }

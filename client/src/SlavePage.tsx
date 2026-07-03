@@ -7,7 +7,7 @@ import { useSlaveVocalInput } from "./slaveVocalInput";
 import { Panel, QueueList, Shell, SlotList, VolumeControl } from "./ui";
 
 export function SlavePage() {
-  const { state, status, error, lastEvent, pairedEvent, send, clearError } = useRoomSocket();
+  const { state, status, error, lastEvent, events, pairedEvent, send, clearError } = useRoomSocket();
   const [pairedSlaveId, setPairedSlaveId] = useState(localStorage.getItem("aiKtvPairedSlaveId") ?? "");
   const [pairingCode, setPairingCode] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -20,7 +20,7 @@ export function SlavePage() {
   const searchRequestSequence = useRef(0);
   const latestSearchRequestId = useRef("");
   const sendThrottledVolume = useThrottledVolumeCommand(send);
-  const vocalInput = useSlaveVocalInput({ state, pairedSlaveId, lastEvent, send });
+  const vocalInput = useSlaveVocalInput({ state, pairedSlaveId, events, send });
 
   useEffect(() => {
     if (status === "open" && pairedSlaveId) {

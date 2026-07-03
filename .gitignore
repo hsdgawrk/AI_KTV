@@ -4,7 +4,10 @@ dev.log
 dev.err
 dev-*.log
 dev-*.err
+serve-*.log
+serve-*.err
 .env
+.cert/
 .browser-profile/
 songs/**
 !songs/
