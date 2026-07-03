@@ -1,19 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ClientCommand, KtvRoomState, VocalInputAvailability } from "../../shared/protocol";
 import type { RoomSocketEvent } from "./roomSocket";
+import {
+  configureLowLatencyAudioSender,
+  getLowLatencyVocalInputStream,
+  LOW_LATENCY_RTC_CONFIGURATION,
+  markTrackAsLiveVocal,
+  setLowLatencyLocalDescription
+} from "./webrtcAudio";
 
 type SlaveVocalInput = {
   message: string;
   permissionState: "idle" | "requesting" | "granted" | "denied";
-};
-
-const VOCAL_INPUT_CONSTRAINTS: MediaStreamConstraints = {
-  audio: {
-    echoCancellation: true,
-    noiseSuppression: true,
-    autoGainControl: false
-  },
-  video: false
 };
 
 export function useSlaveVocalInput(options: {
@@ -79,10 +77,13 @@ export function useSlaveVocalInput(options: {
     setMessage("正在连接主屏");
     reportAvailability(wasAvailableRef.current ? "interrupted" : "unavailable");
 
-    const peer = new RTCPeerConnection({ iceServers: [] });
+    const peer = new RTCPeerConnection(LOW_LATENCY_RTC_CONFIGURATION);
     peerRef.current = peer;
     pendingIceCandidatesRef.current = [];
-    localStreamRef.current.getAudioTracks().forEach((track) => peer.addTrack(track, localStreamRef.current!));
+    localStreamRef.current.getAudioTracks().forEach((track) => {
+      markTrackAsLiveVocal(track);
+      configureLowLatencyAudioSender(peer.addTrack(track, localStreamRef.current!));
+    });
 
     peer.addEventListener("icecandidate", (event) => {
       if (!event.candidate) return;
@@ -133,11 +134,11 @@ export function useSlaveVocalInput(options: {
     try {
       const offer = await peer.createOffer();
       if (peerRef.current !== peer || negotiationId !== negotiationIdRef.current) return;
-      await peer.setLocalDescription(offer);
+      const localDescription = await setLowLatencyLocalDescription(peer, offer);
       send({
         type: "sendVocalInputSignalToMaster",
         pairedSlaveId,
-        signal: { kind: "offer", description: offer }
+        signal: { kind: "offer", description: localDescription }
       });
     } catch (error) {
       console.warn("AI-KTV vocal input offer failed", error);
@@ -170,8 +171,7 @@ export function useSlaveVocalInput(options: {
 
       setPermissionState("requesting");
       setMessage("正在请求麦克风");
-      navigator.mediaDevices
-        .getUserMedia(VOCAL_INPUT_CONSTRAINTS)
+      getLowLatencyVocalInputStream()
         .then((stream) => {
           if (cancelled) {
             stream.getTracks().forEach((track) => track.stop());
@@ -179,6 +179,7 @@ export function useSlaveVocalInput(options: {
           }
 
           localStreamRef.current = stream;
+          stream.getAudioTracks().forEach(markTrackAsLiveVocal);
           setPermissionState("granted");
           setMessage(masterConnected ? "正在连接主屏" : "等待主屏");
           if (masterConnected) {
