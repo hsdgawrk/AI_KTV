@@ -7,7 +7,7 @@ import { useSlaveVocalInput } from "./slaveVocalInput";
 import { Panel, QueueList, Shell, SlotList, VolumeControl } from "./ui";
 
 export function SlavePage() {
-  const { state, status, error, lastEvent, send, clearError } = useRoomSocket();
+  const { state, status, error, lastEvent, pairedEvent, send, clearError } = useRoomSocket();
   const [pairedSlaveId, setPairedSlaveId] = useState(localStorage.getItem("aiKtvPairedSlaveId") ?? "");
   const [pairingCode, setPairingCode] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -29,12 +29,12 @@ export function SlavePage() {
   }, [pairedSlaveId, send, status]);
 
   useEffect(() => {
-    if (lastEvent?.type === "paired") {
-      setPairedSlaveId(lastEvent.pairedSlaveId);
-      localStorage.setItem("aiKtvPairedSlaveId", lastEvent.pairedSlaveId);
+    if (pairedEvent) {
+      setPairedSlaveId(pairedEvent.pairedSlaveId);
+      localStorage.setItem("aiKtvPairedSlaveId", pairedEvent.pairedSlaveId);
       clearError();
     }
-  }, [clearError, lastEvent]);
+  }, [clearError, pairedEvent]);
 
   useEffect(() => {
     if (lastEvent?.type !== "songSearchResult") return;
@@ -90,7 +90,9 @@ export function SlavePage() {
               昵称（可选）
               <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} maxLength={16} />
             </label>
-            <button type="submit">加入</button>
+            <button type="submit" disabled={status !== "open" || pairingCode.length !== 4}>
+              加入
+            </button>
           </form>
         </section>
       </Shell>

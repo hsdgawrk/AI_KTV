@@ -8,7 +8,7 @@ import { useRoomSocket } from "./roomSocket";
 import { Panel, PlaybackNotice, PlaybackProgress, PlaybackStatusPanel, QueueList, Shell, SlotList } from "./ui";
 
 export function MasterPage() {
-  const { state, status, error, lastEvent, send } = useRoomSocket();
+  const { state, status, error, lastEvent, songLibraryRefreshEvent, send } = useRoomSocket();
   const [refreshingSongLibrary, setRefreshingSongLibrary] = useState(false);
   const [songLibraryRefresh, setSongLibraryRefresh] = useState<SongLibraryRefreshSummary>();
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -25,11 +25,11 @@ export function MasterPage() {
   }, [send, status]);
 
   useEffect(() => {
-    if (lastEvent?.type === "songLibraryRefreshResult") {
+    if (songLibraryRefreshEvent) {
       setRefreshingSongLibrary(false);
-      setSongLibraryRefresh(lastEvent.summary);
+      setSongLibraryRefresh(songLibraryRefreshEvent.summary);
     }
-  }, [lastEvent]);
+  }, [songLibraryRefreshEvent]);
 
   if (!state) {
     return (
