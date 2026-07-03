@@ -26,8 +26,10 @@ export function useSlaveVocalInput(options: {
   const [permissionState, setPermissionState] = useState<SlaveVocalInput["permissionState"]>("idle");
   const localStreamRef = useRef<MediaStream | null>(null);
   const peerRef = useRef<RTCPeerConnection | null>(null);
+  const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
   const restartTimerRef = useRef<number | undefined>(undefined);
   const reportedAvailabilityRef = useRef<VocalInputAvailability | undefined>(undefined);
+  const serverAvailabilityRef = useRef<VocalInputAvailability | undefined>(undefined);
   const wasAvailableRef = useRef(false);
   const negotiationIdRef = useRef(0);
 
@@ -35,9 +37,18 @@ export function useSlaveVocalInput(options: {
   const isPaired = Boolean(mySlot && mySlot.connectionState === "connected");
   const masterConnected = Boolean(state?.master.connected);
 
+  useEffect(() => {
+    serverAvailabilityRef.current = mySlot?.vocalInputAvailability;
+  }, [mySlot?.vocalInputAvailability]);
+
   const reportAvailability = useCallback(
     (availability: VocalInputAvailability) => {
-      if (!pairedSlaveId || reportedAvailabilityRef.current === availability) return;
+      if (
+        !pairedSlaveId ||
+        (reportedAvailabilityRef.current === availability && serverAvailabilityRef.current === availability)
+      ) {
+        return;
+      }
       reportedAvailabilityRef.current = availability;
       if (availability === "available") wasAvailableRef.current = true;
       send({ type: "setVocalInputAvailability", pairedSlaveId, availability });
@@ -50,6 +61,7 @@ export function useSlaveVocalInput(options: {
     restartTimerRef.current = undefined;
     peerRef.current?.close();
     peerRef.current = null;
+    pendingIceCandidatesRef.current = [];
   }, []);
 
   const stopLocalStream = useCallback(() => {
@@ -63,9 +75,11 @@ export function useSlaveVocalInput(options: {
     const negotiationId = ++negotiationIdRef.current;
     closePeer();
     setMessage("正在连接主屏");
+    reportAvailability("available");
 
     const peer = new RTCPeerConnection({ iceServers: [] });
     peerRef.current = peer;
+    pendingIceCandidatesRef.current = [];
     localStreamRef.current.getAudioTracks().forEach((track) => peer.addTrack(track, localStreamRef.current!));
 
     peer.addEventListener("icecandidate", (event) => {
@@ -145,6 +159,13 @@ export function useSlaveVocalInput(options: {
 
     let cancelled = false;
     if (!localStreamRef.current) {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setPermissionState("denied");
+        setMessage(window.isSecureContext ? "浏览器不支持麦克风" : "需要 HTTPS 或 localhost 才能使用麦克风");
+        reportAvailability("unavailable");
+        return;
+      }
+
       setPermissionState("requesting");
       setMessage("正在请求麦克风");
       navigator.mediaDevices
@@ -158,8 +179,12 @@ export function useSlaveVocalInput(options: {
           localStreamRef.current = stream;
           setPermissionState("granted");
           setMessage(masterConnected ? "正在连接主屏" : "等待主屏");
-          if (masterConnected) void startNegotiation();
-          else reportAvailability(wasAvailableRef.current ? "interrupted" : "unavailable");
+          if (masterConnected) {
+            reportAvailability("available");
+            void startNegotiation();
+          } else {
+            reportAvailability(wasAvailableRef.current ? "interrupted" : "unavailable");
+          }
         })
         .catch((error: unknown) => {
           if (cancelled) return;
@@ -192,17 +217,48 @@ export function useSlaveVocalInput(options: {
     if (lastEvent.pairedSlaveId !== pairedSlaveId || !peerRef.current) return;
 
     if (lastEvent.signal.kind === "answer") {
-      peerRef.current.setRemoteDescription(lastEvent.signal.description).catch((error: unknown) => {
-        console.warn("AI-KTV vocal input answer rejected", error);
-      });
+      peerRef.current
+        .setRemoteDescription(lastEvent.signal.description)
+        .then(() => flushPendingIceCandidates(peerRef.current, pendingIceCandidatesRef.current))
+        .catch((error: unknown) => {
+          console.warn("AI-KTV vocal input answer rejected", error);
+        });
     }
 
     if (lastEvent.signal.kind === "iceCandidate") {
-      peerRef.current.addIceCandidate(lastEvent.signal.candidate).catch((error: unknown) => {
-        console.warn("AI-KTV vocal input ICE candidate rejected", error);
-      });
+      addOrQueueIceCandidate(peerRef.current, pendingIceCandidatesRef.current, lastEvent.signal.candidate);
     }
   }, [lastEvent, pairedSlaveId]);
 
   return { message, permissionState };
+}
+
+function addOrQueueIceCandidate(
+  peer: RTCPeerConnection,
+  pendingIceCandidates: RTCIceCandidateInit[],
+  candidate: RTCIceCandidateInit
+): void {
+  if (!peer.remoteDescription) {
+    pendingIceCandidates.push(candidate);
+    return;
+  }
+
+  peer.addIceCandidate(candidate).catch((error: unknown) => {
+    console.warn("AI-KTV vocal input ICE candidate rejected", error);
+  });
+}
+
+function flushPendingIceCandidates(
+  peer: RTCPeerConnection | null,
+  pendingIceCandidates: RTCIceCandidateInit[]
+): Promise<void[]> {
+  if (!peer) return Promise.resolve([]);
+  const candidates = pendingIceCandidates.splice(0);
+  return Promise.all(
+    candidates.map((candidate) =>
+      peer.addIceCandidate(candidate).catch((error: unknown) => {
+        console.warn("AI-KTV queued vocal input ICE candidate rejected", error);
+      })
+    )
+  );
 }

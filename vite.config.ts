@@ -5,10 +5,16 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
-    strictPort: false
+    strictPort: false,
+    proxy: {
+      "/media": "http://localhost:3000",
+      "/ws": {
+        target: "ws://localhost:3000",
+        ws: true
+      }
+    }
   },
   build: {
     outDir: "dist/client"
   }
 });
-

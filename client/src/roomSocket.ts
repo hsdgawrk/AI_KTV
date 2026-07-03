@@ -39,6 +39,5 @@ export function useRoomSocket() {
 
 function serverWsUrl(): string {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const port = window.location.port === "5173" ? "3000" : window.location.port;
-  return `${protocol}//${window.location.hostname}${port ? `:${port}` : ""}/ws`;
+  return `${protocol}//${window.location.host}/ws`;
 }

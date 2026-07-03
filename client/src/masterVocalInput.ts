@@ -4,6 +4,7 @@ import type { ClientCommand, KtvRoomState, ServerEvent } from "../../shared/prot
 type VocalPeer = {
   peer: RTCPeerConnection;
   stream: MediaStream;
+  pendingIceCandidates: RTCIceCandidateInit[];
   source?: MediaStreamAudioSourceNode;
   gain?: GainNode;
 };
@@ -20,6 +21,11 @@ export function useMasterVocalInput(options: {
   const { state, lastEvent, send } = options;
   const audioContextRef = useRef<AudioContext | null>(null);
   const peersRef = useRef(new Map<string, VocalPeer>());
+  const stateRef = useRef<KtvRoomState | undefined>(state);
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   const audioContext = useCallback((): AudioContext | undefined => {
     const AudioContextConstructor =
@@ -49,7 +55,7 @@ export function useMasterVocalInput(options: {
       closePeer(pairedSlaveId);
       const peer = new RTCPeerConnection({ iceServers: [] });
       const stream = new MediaStream();
-      const record: VocalPeer = { peer, stream };
+      const record: VocalPeer = { peer, stream, pendingIceCandidates: [] };
       peersRef.current.set(pairedSlaveId, record);
 
       peer.addEventListener("icecandidate", (event) => {
@@ -73,6 +79,7 @@ export function useMasterVocalInput(options: {
           record.gain = context.createGain();
           record.gain.gain.value = 0;
           record.source.connect(record.gain).connect(context.destination);
+          applyVocalGain(record, pairedSlaveId, stateRef.current);
         }
       });
 
@@ -89,6 +96,7 @@ export function useMasterVocalInput(options: {
       const record = createPeer(pairedSlaveId);
       record.peer
         .setRemoteDescription(signal.description)
+        .then(() => flushPendingIceCandidates(record))
         .then(() => record.peer.createAnswer())
         .then((answer) => record.peer.setLocalDescription(answer).then(() => answer))
         .then((answer) => {
@@ -106,9 +114,8 @@ export function useMasterVocalInput(options: {
     }
 
     if (signal.kind === "iceCandidate") {
-      peersRef.current.get(pairedSlaveId)?.peer.addIceCandidate(signal.candidate).catch((error: unknown) => {
-        console.warn("AI-KTV vocal input ICE candidate rejected", error);
-      });
+      const record = peersRef.current.get(pairedSlaveId);
+      if (record) addOrQueueIceCandidate(record, signal.candidate);
     }
   }, [closePeer, createPeer, lastEvent, send]);
 
@@ -127,13 +134,7 @@ export function useMasterVocalInput(options: {
       if (!slot.pairedSlaveId) continue;
       const record = peersRef.current.get(slot.pairedSlaveId);
       if (!record?.gain) continue;
-      const targetGain =
-        slot.connectionState === "connected" &&
-        slot.vocalInputAvailability === "available" &&
-        slot.vocalInputState === "singing"
-          ? slot.vocalVolume / 100
-          : 0;
-      record.gain.gain.setTargetAtTime(targetGain, record.gain.context.currentTime, 0.03);
+      applyVocalGain(record, slot.pairedSlaveId, state);
     }
   }, [closePeer, state?.slaveSlots]);
 
@@ -146,4 +147,38 @@ export function useMasterVocalInput(options: {
   }, [closePeer]);
 
   return { resumeOutput };
+}
+
+function addOrQueueIceCandidate(record: VocalPeer, candidate: RTCIceCandidateInit): void {
+  if (!record.peer.remoteDescription) {
+    record.pendingIceCandidates.push(candidate);
+    return;
+  }
+
+  record.peer.addIceCandidate(candidate).catch((error: unknown) => {
+    console.warn("AI-KTV vocal input ICE candidate rejected", error);
+  });
+}
+
+function flushPendingIceCandidates(record: VocalPeer): Promise<void[]> {
+  const candidates = record.pendingIceCandidates.splice(0);
+  return Promise.all(
+    candidates.map((candidate) =>
+      record.peer.addIceCandidate(candidate).catch((error: unknown) => {
+        console.warn("AI-KTV queued vocal input ICE candidate rejected", error);
+      })
+    )
+  );
+}
+
+function applyVocalGain(record: VocalPeer, pairedSlaveId: string, state: KtvRoomState | undefined): void {
+  if (!record.gain) return;
+  const slot = state?.slaveSlots.find((candidate) => candidate.pairedSlaveId === pairedSlaveId);
+  const targetGain =
+    slot?.connectionState === "connected" &&
+    slot.vocalInputAvailability === "available" &&
+    slot.vocalInputState === "singing"
+      ? slot.vocalVolume / 100
+      : 0;
+  record.gain.gain.setTargetAtTime(targetGain, record.gain.context.currentTime, 0.03);
 }
