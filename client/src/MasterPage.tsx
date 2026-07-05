@@ -3,21 +3,18 @@ import type { KtvRoomState, SongLibraryRefreshSummary } from "../../shared/proto
 import { formatTime, modeLabel } from "./format";
 import { LyricStage } from "./lyrics";
 import { type MasterPlayback, useMasterPlayback } from "./masterPlayback";
-import { useMasterVocalInput } from "./masterVocalInput";
 import { useRoomSocket } from "./roomSocket";
 import { Panel, PlaybackNotice, PlaybackProgress, PlaybackStatusPanel, QueueList, Shell, SlotList } from "./ui";
 
 export function MasterPage() {
-  const { state, status, error, events, songLibraryRefreshEvent, send } = useRoomSocket();
+  const { state, status, error, songLibraryRefreshEvent, send } = useRoomSocket();
   const [refreshingSongLibrary, setRefreshingSongLibrary] = useState(false);
   const [songLibraryRefresh, setSongLibraryRefresh] = useState<SongLibraryRefreshSummary>();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const playback = useMasterPlayback(state, send, audioRef);
-  const vocalInput = useMasterVocalInput({ state, events, send });
   const isSingingView = Boolean(state?.currentSong);
   const unlockRoomAudio = () => {
     playback.unlockAudio();
-    vocalInput.resumeOutput();
   };
 
   useEffect(() => {
@@ -62,7 +59,7 @@ export function MasterPage() {
                 <small>{state.currentSong?.song.artist} · {modeLabel(state.singingMode)}</small>
               </div>
               <div className="room-chip">
-                <span>演唱位</span>
+                <span>点歌端</span>
                 <strong>{compactSlotSummary(state)}</strong>
               </div>
               <div className="room-chip">
@@ -90,19 +87,16 @@ export function MasterPage() {
       {isSingingView ? (
         <section className="compact-room-strip">
           <span>{playback.message}</span>
-          <span>{vocalInput.message}</span>
           <span>{formatTime(playback.currentTime)} / {formatTime(playback.duration)}</span>
-          {vocalInput.outputStatus === "blocked" && <button onClick={vocalInput.resumeOutput}>启用人声</button>}
           {playback.status === "blocked" && <button onClick={unlockRoomAudio}>启用声音</button>}
         </section>
       ) : (
         <section className="dashboard-grid">
-          <Panel title="演唱位">
+          <Panel title="点歌端">
             <SlotList state={state} />
           </Panel>
           <Panel title="播放状态">
             <PlaybackStatusPanel playback={playback} onResume={unlockRoomAudio} />
-            <VocalOutputStatus status={vocalInput.outputStatus} message={vocalInput.message} onResume={vocalInput.resumeOutput} />
           </Panel>
           <Panel title="曲库">
             <SongLibraryPanel
@@ -121,22 +115,6 @@ export function MasterPage() {
         </section>
       )}
     </Shell>
-  );
-}
-
-function VocalOutputStatus(props: {
-  status: ReturnType<typeof useMasterVocalInput>["outputStatus"];
-  message: string;
-  onResume: () => void;
-}) {
-  return (
-    <div className={`vocal-output-status ${props.status}`}>
-      <div>
-        <strong>{props.message}</strong>
-        <span>Slave 人声监听</span>
-      </div>
-      {props.status === "blocked" && <button onClick={props.onResume}>启用人声</button>}
-    </div>
   );
 }
 
@@ -181,10 +159,7 @@ function SongLibraryPanel(props: {
 function compactSlotSummary(state: KtvRoomState): string {
   const connectedSlots = state.slaveSlots.filter((slot) => slot.connectionState === "connected");
   if (connectedSlots.length === 0) return "未连接";
-
-  const singingCount = connectedSlots.filter((slot) => slot.vocalInputState === "singing").length;
-  if (singingCount > 0) return `${singingCount} 人演唱`;
-  return `${connectedSlots.length} 人已连接`;
+  return `${connectedSlots.length} 个已连接`;
 }
 
 function MasterAudioGate({ playback, onUnlock }: { playback: MasterPlayback; onUnlock: () => void }) {

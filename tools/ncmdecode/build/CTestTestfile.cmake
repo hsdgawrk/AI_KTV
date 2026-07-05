@@ -1,0 +1,36 @@
+# CMake generated Testfile for 
+# Source directory: D:/AI-KTV/tools/ncmdecode
+# Build directory: D:/AI-KTV/tools/ncmdecode/build
+# 
+# This file includes the relevant testing commands required for 
+# testing this directory and lists subdirectories to be tested as well.
+if(CTEST_CONFIGURATION_TYPE MATCHES "^([Dd][Ee][Bb][Uu][Gg])$")
+  add_test([=[ncmdecode_usage]=] "D:/AI-KTV/tools/ncmdecode/build/Debug/ncmdecode.exe" "--help")
+  set_tests_properties([=[ncmdecode_usage]=] PROPERTIES  _BACKTRACE_TRIPLES "D:/AI-KTV/tools/ncmdecode/CMakeLists.txt;17;add_test;D:/AI-KTV/tools/ncmdecode/CMakeLists.txt;0;")
+elseif(CTEST_CONFIGURATION_TYPE MATCHES "^([Rr][Ee][Ll][Ee][Aa][Ss][Ee])$")
+  add_test([=[ncmdecode_usage]=] "D:/AI-KTV/tools/ncmdecode/build/Release/ncmdecode.exe" "--help")
+  set_tests_properties([=[ncmdecode_usage]=] PROPERTIES  _BACKTRACE_TRIPLES "D:/AI-KTV/tools/ncmdecode/CMakeLists.txt;17;add_test;D:/AI-KTV/tools/ncmdecode/CMakeLists.txt;0;")
+elseif(CTEST_CONFIGURATION_TYPE MATCHES "^([Mm][Ii][Nn][Ss][Ii][Zz][Ee][Rr][Ee][Ll])$")
+  add_test([=[ncmdecode_usage]=] "D:/AI-KTV/tools/ncmdecode/build/MinSizeRel/ncmdecode.exe" "--help")
+  set_tests_properties([=[ncmdecode_usage]=] PROPERTIES  _BACKTRACE_TRIPLES "D:/AI-KTV/tools/ncmdecode/CMakeLists.txt;17;add_test;D:/AI-KTV/tools/ncmdecode/CMakeLists.txt;0;")
+elseif(CTEST_CONFIGURATION_TYPE MATCHES "^([Rr][Ee][Ll][Ww][Ii][Tt][Hh][Dd][Ee][Bb][Ii][Nn][Ff][Oo])$")
+  add_test([=[ncmdecode_usage]=] "D:/AI-KTV/tools/ncmdecode/build/RelWithDebInfo/ncmdecode.exe" "--help")
+  set_tests_properties([=[ncmdecode_usage]=] PROPERTIES  _BACKTRACE_TRIPLES "D:/AI-KTV/tools/ncmdecode/CMakeLists.txt;17;add_test;D:/AI-KTV/tools/ncmdecode/CMakeLists.txt;0;")
+else()
+  add_test([=[ncmdecode_usage]=] NOT_AVAILABLE)
+endif()
+if(CTEST_CONFIGURATION_TYPE MATCHES "^([Dd][Ee][Bb][Uu][Gg])$")
+  add_test([=[ncmdecode_self_test]=] "D:/AI-KTV/tools/ncmdecode/build/Debug/ncmdecode.exe" "--self-test")
+  set_tests_properties([=[ncmdecode_self_test]=] PROPERTIES  _BACKTRACE_TRIPLES "D:/AI-KTV/tools/ncmdecode/CMakeLists.txt;18;add_test;D:/AI-KTV/tools/ncmdecode/CMakeLists.txt;0;")
+elseif(CTEST_CONFIGURATION_TYPE MATCHES "^([Rr][Ee][Ll][Ee][Aa][Ss][Ee])$")
+  add_test([=[ncmdecode_self_test]=] "D:/AI-KTV/tools/ncmdecode/build/Release/ncmdecode.exe" "--self-test")
+  set_tests_properties([=[ncmdecode_self_test]=] PROPERTIES  _BACKTRACE_TRIPLES "D:/AI-KTV/tools/ncmdecode/CMakeLists.txt;18;add_test;D:/AI-KTV/tools/ncmdecode/CMakeLists.txt;0;")
+elseif(CTEST_CONFIGURATION_TYPE MATCHES "^([Mm][Ii][Nn][Ss][Ii][Zz][Ee][Rr][Ee][Ll])$")
+  add_test([=[ncmdecode_self_test]=] "D:/AI-KTV/tools/ncmdecode/build/MinSizeRel/ncmdecode.exe" "--self-test")
+  set_tests_properties([=[ncmdecode_self_test]=] PROPERTIES  _BACKTRACE_TRIPLES "D:/AI-KTV/tools/ncmdecode/CMakeLists.txt;18;add_test;D:/AI-KTV/tools/ncmdecode/CMakeLists.txt;0;")
+elseif(CTEST_CONFIGURATION_TYPE MATCHES "^([Rr][Ee][Ll][Ww][Ii][Tt][Hh][Dd][Ee][Bb][Ii][Nn][Ff][Oo])$")
+  add_test([=[ncmdecode_self_test]=] "D:/AI-KTV/tools/ncmdecode/build/RelWithDebInfo/ncmdecode.exe" "--self-test")
+  set_tests_properties([=[ncmdecode_self_test]=] PROPERTIES  _BACKTRACE_TRIPLES "D:/AI-KTV/tools/ncmdecode/CMakeLists.txt;18;add_test;D:/AI-KTV/tools/ncmdecode/CMakeLists.txt;0;")
+else()
+  add_test([=[ncmdecode_self_test]=] NOT_AVAILABLE)
+endif()

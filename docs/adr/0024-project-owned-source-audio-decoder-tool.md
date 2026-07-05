@@ -1,0 +1,3 @@
+# Project-Owned Source Audio Decoder Tool
+
+The project may provide its own local **Source Audio Decode** command-line tool for **Song Import**, but that tool stays outside the live **Server** runtime and only decodes source audio into playable audio plus extracted source metadata and cover art. Its interface will take an input source file and an output directory, then write stable names such as `audio.mp3` or `audio.flac`, `meta.json`, and optional `cover.jpg` or `cover.png`. This keeps downloaded-source compatibility work isolated from **KTV Room** coordination, lets the importer treat decoding as a replaceable local step, and keeps tagging, lyric conversion, accompaniment separation, and **Song Manifest** generation in the higher-level **Song Import** flow.

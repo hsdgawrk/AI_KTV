@@ -1,6 +1,4 @@
 export type SingingMode = "originalVocal" | "accompaniment";
-export type VocalInputAvailability = "unavailable" | "available" | "interrupted";
-export type VocalInputState = "idle" | "singing";
 export type ConnectionState = "empty" | "connected" | "disconnected";
 
 export type Song = {
@@ -59,9 +57,6 @@ export type SlaveSlot = {
   displayName?: string;
   displayLabel: string;
   connectionState: ConnectionState;
-  vocalInputAvailability: VocalInputAvailability;
-  vocalVolume: number;
-  vocalInputState: VocalInputState;
   disconnectedUntil?: number;
 };
 
@@ -81,11 +76,6 @@ export type KtvRoomState = {
   accompanimentVolume: number;
 };
 
-export type VocalInputSignal =
-  | { kind: "offer"; description: RTCSessionDescriptionInit }
-  | { kind: "answer"; description: RTCSessionDescriptionInit }
-  | { kind: "iceCandidate"; candidate: RTCIceCandidateInit };
-
 export type ClientCommand =
   | { type: "registerMaster" }
   | { type: "pairSlave"; deviceId: string; pairingCode: string; displayName?: string }
@@ -98,11 +88,6 @@ export type ClientCommand =
   | { type: "refreshSongLibrary" }
   | { type: "changeSingingMode"; pairedSlaveId: string; singingMode: SingingMode }
   | { type: "setAccompanimentVolume"; pairedSlaveId: string; volume: number }
-  | { type: "setVocalVolume"; pairedSlaveId: string; volume: number }
-  | { type: "setVocalInputAvailability"; pairedSlaveId: string; availability: VocalInputAvailability }
-  | { type: "setVocalInputState"; pairedSlaveId: string; state: VocalInputState }
-  | { type: "sendVocalInputSignalToMaster"; pairedSlaveId: string; signal: VocalInputSignal }
-  | { type: "sendVocalInputSignalToSlave"; pairedSlaveId: string; signal: VocalInputSignal }
   | { type: "reportSongEnd"; queueId: string }
   | { type: "reportUnplayableSong"; queueId: string };
 
@@ -119,6 +104,4 @@ export type ServerEvent =
       songLibraryVersion: number;
     }
   | { type: "songLibraryRefreshResult"; summary: SongLibraryRefreshSummary; songLibraryVersion: number }
-  | { type: "vocalInputSignalFromSlave"; pairedSlaveId: string; signal: VocalInputSignal }
-  | { type: "vocalInputSignalFromMaster"; pairedSlaveId: string; signal: VocalInputSignal }
   | { type: "commandRejected"; command: ClientCommand["type"]; reason: string };

@@ -1,6 +1,6 @@
 import type { ClientCommand, KtvRoomState } from "../../shared/protocol";
 import type { MasterPlayback } from "./masterPlayback";
-import { clamp01, connectionLabel, formatTime, statusLabel, vocalInputAvailabilityLabel } from "./format";
+import { clamp01, connectionLabel, formatTime, statusLabel } from "./format";
 
 export function Shell(props: { title: string; status: string; error?: string; children?: React.ReactNode }) {
   return (
@@ -34,13 +34,7 @@ export function SlotList({ state }: { state: KtvRoomState }) {
         <div className="slot-row" key={slot.slotNumber}>
           <div>
             <strong>{slot.displayLabel}</strong>
-            <span>
-              {connectionLabel(slot.connectionState)} · {vocalInputAvailabilityLabel(slot.vocalInputAvailability)}
-            </span>
-          </div>
-          <div>
-            <span>{slot.vocalInputState === "singing" ? "演唱中" : "未演唱"}</span>
-            <span>{slot.vocalVolume}</span>
+            <span>{connectionLabel(slot.connectionState)}</span>
           </div>
         </div>
       ))}

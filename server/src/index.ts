@@ -1,18 +1,16 @@
 import express from "express";
-import fs from "node:fs";
 import { createServer as createHttpServer } from "node:http";
-import { createServer as createHttpsServer } from "node:https";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocket, WebSocketServer } from "ws";
 import type { ClientCommand, ServerEvent } from "../../shared/protocol";
-import { type ConnectionRole, type TargetedServerEvent, handleClientCommand } from "./commandGateway";
+import { type ConnectionRole, handleClientCommand } from "./commandGateway";
 import { KtvRoom } from "./room";
 
 const PORT = Number(process.env.PORT ?? 3000);
 const room = new KtvRoom();
 const app = express();
-const server = createNodeServer(app);
+const server = createHttpServer(app);
 const wss = new WebSocketServer({ server, path: "/ws" });
 
 const roles = new Map<WebSocket, ConnectionRole>();
@@ -60,7 +58,6 @@ wss.on("connection", (socket) => {
     const outcome = handleClientCommand(room, roles.get(socket) ?? { kind: "unknown" }, command);
     if (outcome.nextRole) roles.set(socket, outcome.nextRole);
     for (const event of outcome.events) send(socket, event);
-    for (const targetedEvent of outcome.targetedEvents ?? []) sendTargeted(targetedEvent);
     if (outcome.broadcastState) broadcastState();
   });
 
@@ -86,52 +83,14 @@ setInterval(() => {
 }, 5_000);
 
 server.listen(PORT, () => {
-  const protocol = process.env.AI_KTV_SERVER_HTTPS === "1" ? "https" : "http";
-  console.log(`AI-KTV Server listening on ${protocol}://localhost:${PORT}`);
+  console.log(`AI-KTV Server listening on http://localhost:${PORT}`);
 });
-
-function createNodeServer(handler: express.Express) {
-  if (process.env.AI_KTV_SERVER_HTTPS !== "1") {
-    return createHttpServer(handler);
-  }
-
-  const pfxPath = path.resolve(process.env.AI_KTV_HTTPS_PFX ?? ".cert/ai-ktv-local.pfx");
-  if (!fs.existsSync(pfxPath)) {
-    throw new Error(`Missing HTTPS certificate: ${pfxPath}. Run npm run cert:local first.`);
-  }
-
-  return createHttpsServer(
-    {
-      pfx: fs.readFileSync(pfxPath),
-      passphrase: process.env.AI_KTV_HTTPS_PFX_PASSPHRASE ?? "ai-ktv-local-dev"
-    },
-    handler
-  );
-}
 
 function broadcastState(): void {
   const state = room.getState();
   for (const client of wss.clients) {
     if (client.readyState === WebSocket.OPEN) {
       send(client, { type: "roomState", state });
-    }
-  }
-}
-
-function sendTargeted(targetedEvent: TargetedServerEvent): void {
-  for (const [socket, role] of roles.entries()) {
-    if (targetedEvent.target === "master" && role.kind === "master") {
-      send(socket, targetedEvent.event);
-      return;
-    }
-
-    if (
-      typeof targetedEvent.target !== "string" &&
-      role.kind === "slave" &&
-      role.pairedSlaveId === targetedEvent.target.pairedSlaveId
-    ) {
-      send(socket, targetedEvent.event);
-      return;
     }
   }
 }

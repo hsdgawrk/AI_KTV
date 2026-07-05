@@ -1,13 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ClientCommand, SongSearchResultItem } from "../../shared/protocol";
 import { deviceId } from "./device";
-import { vocalInputAvailabilityLabel } from "./format";
 import { useRoomSocket } from "./roomSocket";
-import { useSlaveVocalInput } from "./slaveVocalInput";
 import { Panel, QueueList, Shell, SlotList, VolumeControl } from "./ui";
 
 export function SlavePage() {
-  const { state, status, error, lastEvent, events, pairedEvent, send, clearError } = useRoomSocket();
+  const { state, status, error, lastEvent, pairedEvent, send, clearError } = useRoomSocket();
   const [pairedSlaveId, setPairedSlaveId] = useState(localStorage.getItem("aiKtvPairedSlaveId") ?? "");
   const [pairingCode, setPairingCode] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -20,7 +18,6 @@ export function SlavePage() {
   const searchRequestSequence = useRef(0);
   const latestSearchRequestId = useRef("");
   const sendThrottledVolume = useThrottledVolumeCommand(send);
-  const vocalInput = useSlaveVocalInput({ state, pairedSlaveId, events, send });
 
   useEffect(() => {
     if (status === "open" && pairedSlaveId) {
@@ -103,7 +100,6 @@ export function SlavePage() {
   for (const queuedSong of state.playbackQueue) {
     queueCountBySongId.set(queuedSong.song.id, (queueCountBySongId.get(queuedSong.song.id) ?? 0) + 1);
   }
-  const vocalInputAvailable = mySlot.vocalInputAvailability === "available";
   const skipCurrentSong = () => {
     if (!state.currentSong) return;
     if (!skipArmed) {
@@ -143,12 +139,7 @@ export function SlavePage() {
       </section>
 
       <section className="dashboard-grid">
-        <Panel title="我的演唱">
-          <div className={`vocal-input-status ${mySlot.vocalInputAvailability}`}>
-            <span>麦克风</span>
-            <strong>{vocalInputAvailabilityLabel(mySlot.vocalInputAvailability)}</strong>
-            <small>{vocalInput.message}</small>
-          </div>
+        <Panel title="我的点歌端">
           <label>
             昵称
             <input
@@ -157,24 +148,7 @@ export function SlavePage() {
               onBlur={(event) => send({ type: "renameSlave", pairedSlaveId, displayName: event.target.value })}
             />
           </label>
-          <VolumeControl
-            label="人声音量"
-            value={mySlot.vocalVolume}
-            onChange={(volume) => sendThrottledVolume({ type: "setVocalVolume", pairedSlaveId, volume })}
-          />
-          <button
-            className={mySlot.vocalInputState === "singing" ? "active wide-button" : "wide-button"}
-            disabled={!vocalInputAvailable}
-            onClick={() =>
-              send({
-                type: "setVocalInputState",
-                pairedSlaveId,
-                state: mySlot.vocalInputState === "singing" ? "idle" : "singing"
-              })
-            }
-          >
-            {mySlot.vocalInputState === "singing" ? "停止演唱" : "开始演唱"}
-          </button>
+          <p className="muted">已连接到 {mySlot.displayLabel}</p>
         </Panel>
         <Panel title="房间控制">
           <VolumeControl
@@ -238,7 +212,7 @@ function useThrottledVolumeCommand(send: (command: ClientCommand) => void) {
     };
   }, []);
 
-  return (command: Extract<ClientCommand, { type: "setVocalVolume" | "setAccompanimentVolume" }>) => {
+  return (command: Extract<ClientCommand, { type: "setAccompanimentVolume" }>) => {
     const now = Date.now();
     const elapsed = now - lastSentAt.current;
     if (elapsed >= 120) {

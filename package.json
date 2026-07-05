@@ -7,11 +7,6 @@
     "dev": "concurrently \"npm:dev:server\" \"npm:dev:client\"",
     "dev:server": "tsx watch server/src/index.ts",
     "dev:client": "vite --host 0.0.0.0",
-    "dev:https": "concurrently \"npm:dev:server\" \"npm:dev:client:https\"",
-    "dev:client:https": "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/start-dev-client-https.ps1",
-    "cert:local": "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/new-local-https-cert.ps1",
-    "cert:local:trust": "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/new-local-https-cert.ps1 -TrustOnThisMachine",
-    "serve:https": "npm run build && pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/start-server-https.ps1",
     "open:master": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/open-master-kiosk.ps1",
     "test": "vitest run",
     "build": "tsc --noEmit && vite build"

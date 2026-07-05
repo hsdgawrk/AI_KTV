@@ -1,0 +1,10 @@
+^D:\AI-KTV\TOOLS\NCMDECODE\BUILD\CMAKEFILES\A45E58A046F99FE7D3A3EB3A61A76EBB\GENERATE.STAMP.RULE
+setlocal
+D:\Software\CMake\bin\cmake.exe -SD:/AI-KTV/tools/ncmdecode -BD:/AI-KTV/tools/ncmdecode/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file D:/AI-KTV/tools/ncmdecode/build/ncmdecode.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

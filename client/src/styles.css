@@ -418,29 +418,13 @@ h3 {
   gap: 14px;
 }
 
-.playback-status-panel div,
-.vocal-output-status div {
+.playback-status-panel div {
   display: grid;
   gap: 6px;
 }
 
-.playback-status-panel span,
-.vocal-output-status span {
+.playback-status-panel span {
   color: var(--text-muted);
-}
-
-.vocal-output-status {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 54px;
-  border-top: 1px solid rgba(244, 239, 227, 0.12);
-  padding-top: 14px;
-}
-
-.vocal-output-status.blocked strong {
-  color: #f0c86e;
 }
 
 .library-panel {
@@ -491,44 +475,6 @@ h3 {
   display: grid;
   gap: 5px;
   margin-top: 6px;
-}
-
-.vocal-input-status {
-  display: grid;
-  gap: 4px;
-  min-height: 76px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: #11110f;
-  padding: 12px;
-}
-
-.vocal-input-status span,
-.vocal-input-status small {
-  color: var(--text-muted);
-}
-
-.vocal-input-status strong {
-  color: #f4efe3;
-  font-size: 22px;
-}
-
-.vocal-input-status.available {
-  border-color: rgba(114, 181, 106, 0.55);
-  background: rgba(114, 181, 106, 0.1);
-}
-
-.vocal-input-status.available strong {
-  color: #bdeeb7;
-}
-
-.vocal-input-status.interrupted {
-  border-color: rgba(214, 169, 67, 0.62);
-  background: rgba(214, 169, 67, 0.1);
-}
-
-.vocal-input-status.interrupted strong {
-  color: #f0c86e;
 }
 
 .compact-room-strip {

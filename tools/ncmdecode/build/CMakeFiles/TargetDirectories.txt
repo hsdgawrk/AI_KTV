@@ -1,0 +1,4 @@
+D:/AI-KTV/tools/ncmdecode/build/CMakeFiles/ncmdecode.dir
+D:/AI-KTV/tools/ncmdecode/build/CMakeFiles/RUN_TESTS.dir
+D:/AI-KTV/tools/ncmdecode/build/CMakeFiles/ALL_BUILD.dir
+D:/AI-KTV/tools/ncmdecode/build/CMakeFiles/ZERO_CHECK.dir

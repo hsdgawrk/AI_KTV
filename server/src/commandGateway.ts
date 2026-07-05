@@ -11,13 +11,8 @@ type RoomCommandResult = { ok: true } | { ok: false; reason: string };
 type CommandOutcome = {
   nextRole?: ConnectionRole;
   events: ServerEvent[];
-  targetedEvents?: TargetedServerEvent[];
   broadcastState: boolean;
 };
-
-export type TargetedServerEvent =
-  | { target: "master"; event: ServerEvent }
-  | { target: { kind: "slave"; pairedSlaveId: string }; event: ServerEvent };
 
 export function handleClientCommand(room: KtvRoom, role: ConnectionRole, command: ClientCommand): CommandOutcome {
   switch (command.type) {
@@ -71,18 +66,6 @@ export function handleClientCommand(room: KtvRoom, role: ConnectionRole, command
       return runRoomCommand(command, () => room.changeSingingMode(command.pairedSlaveId, command.singingMode));
     case "setAccompanimentVolume":
       return runRoomCommand(command, () => room.setAccompanimentVolume(command.pairedSlaveId, command.volume));
-    case "setVocalVolume":
-      return runRoomCommand(command, () => room.setVocalVolume(command.pairedSlaveId, command.volume));
-    case "setVocalInputAvailability":
-      return runRoomCommand(command, () =>
-        room.setVocalInputAvailability(command.pairedSlaveId, command.availability)
-      );
-    case "setVocalInputState":
-      return runRoomCommand(command, () => room.setVocalInputState(command.pairedSlaveId, command.state));
-    case "sendVocalInputSignalToMaster":
-      return runSlaveSignalCommand(role, command);
-    case "sendVocalInputSignalToSlave":
-      return runMasterSignalCommand(role, command);
     case "reportSongEnd":
       return runMasterCommand(role, command, () => room.reportSongEnd(command.queueId));
     case "reportUnplayableSong":
@@ -132,54 +115,6 @@ function runRefreshSongLibraryCommand(
   return {
     events: [{ type: "songLibraryRefreshResult", summary: result.value, songLibraryVersion: nextVersion }],
     broadcastState: nextVersion !== previousVersion
-  };
-}
-
-function runSlaveSignalCommand(
-  role: ConnectionRole,
-  command: Extract<ClientCommand, { type: "sendVocalInputSignalToMaster" }>
-): CommandOutcome {
-  if (role.kind !== "slave" || role.pairedSlaveId !== command.pairedSlaveId) {
-    return rejected(command, "只有对应 Slave 可以发送 Vocal Input 信令");
-  }
-
-  return {
-    events: [],
-    targetedEvents: [
-      {
-        target: "master",
-        event: {
-          type: "vocalInputSignalFromSlave",
-          pairedSlaveId: command.pairedSlaveId,
-          signal: command.signal
-        }
-      }
-    ],
-    broadcastState: false
-  };
-}
-
-function runMasterSignalCommand(
-  role: ConnectionRole,
-  command: Extract<ClientCommand, { type: "sendVocalInputSignalToSlave" }>
-): CommandOutcome {
-  if (role.kind !== "master") {
-    return rejected(command, "只有 Master 可以发送 Vocal Input 信令");
-  }
-
-  return {
-    events: [],
-    targetedEvents: [
-      {
-        target: { kind: "slave", pairedSlaveId: command.pairedSlaveId },
-        event: {
-          type: "vocalInputSignalFromMaster",
-          pairedSlaveId: command.pairedSlaveId,
-          signal: command.signal
-        }
-      }
-    ],
-    broadcastState: false
   };
 }
 

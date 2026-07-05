@@ -1,14 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { assetKey, loadSongLibraryFromDirectory } from "../src/songLibrary";
-import { seededSongLibrary } from "../src/songs";
 
-describe("seededSongLibrary", () => {
-  it("only references local song assets that exist", () => {
-    const localAssets = loadSongLibraryFromDirectory().assets;
+describe("song asset directory", () => {
+  it("only exposes scanned songs with local assets that exist", () => {
+    const library = loadSongLibraryFromDirectory();
 
-    for (const song of seededSongLibrary) {
-      expect(localSongAssetExists(song.originalVocalUrl, localAssets), `${song.id} original vocal`).toBe(true);
-      expect(localSongAssetExists(song.accompanimentUrl, localAssets), `${song.id} accompaniment`).toBe(true);
+    for (const song of library.songs) {
+      expect(localSongAssetExists(song.originalVocalUrl, library.assets), `${song.id} original vocal`).toBe(true);
+      expect(localSongAssetExists(song.accompanimentUrl, library.assets), `${song.id} accompaniment`).toBe(true);
     }
   });
 });
